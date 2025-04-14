@@ -4,6 +4,7 @@ import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.service.WalletService;
+import jakarta.transaction.RollbackException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -26,7 +27,7 @@ public class WalletController {
 
 
     @PostMapping("/recharge")
-    public ResponseEntity<?> depositFunds(@RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException {
+    public ResponseEntity<?> depositFunds(@RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException, RollbackException {
         walletService.depositFundsToAccount(paymentRequest);
         return ResponseEntity.ok(HttpStatus.ACCEPTED);
     }

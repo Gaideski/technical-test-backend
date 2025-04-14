@@ -52,7 +52,13 @@ public class TransactionService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateTransactionPaymentStatus(long transactionId, PaymentStatus status) throws TransactionNotFoundException {
-        transactionRepository.updatePaymentStatus(transactionId, status);
+        // best approach since it can be flushed to the db when more updates happen
+        // transactionRepository.updatePaymentStatus(transactionId, status);
+
+        // Emulate latency and async requests
+        var transaction = findTransactionById(transactionId);
+        transaction.setPaymentStatus(status);
+        transactionRepository.save(transaction);
 
     }
 
@@ -61,7 +67,7 @@ public class TransactionService {
                 () -> new TransactionNotFoundException(transactionId));
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.MANDATORY)
     public void finalizeTransaction(Transaction transaction) {
         transaction.setFinishedAt(new Date());
         transaction.setPaymentStatus(PaymentStatus.FINALIZED);

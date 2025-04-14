@@ -7,6 +7,7 @@ import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.model.responses.WalletResponse;
 import com.playtomic.tests.wallet.repository.WalletRepository;
+import jakarta.transaction.RollbackException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +29,6 @@ public class WalletService {
     private final PaymentProcessorService paymentProcessorService;
     private final TransactionService transactionService;
     private final Logger logger = LoggerFactory.getLogger(WalletService.class);
-    @Autowired
-    private PlatformTransactionManager transactionManager;
 
     public Optional<WalletResponse> getOrCreateWalletByAccountId(String accountId) {
         Optional<Wallet> wallet = walletRepository.findByAccountIdWithTransactions(accountId);
@@ -57,39 +56,26 @@ public class WalletService {
                         value.getTransactions()));
     }
 
-    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException {
+    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException, RollbackException {
         // sync submission to database
         var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
                 .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
 
         var transaction = transactionService.createInitialTransaction(wallet, paymentRequest);
 
-        // Async process - chain everything together
-        paymentProcessorService.requestPaymentForGateway(paymentRequest, transaction.getTransactionId());
-//                .thenAcceptAsync(response -> {
-//                    try {
-        logger.info("Finalizing the transaction");
-        //verifyTransactionAndUpdateFunds(wallet, transaction.getTransactionId());
-        logger.info("FINISHED1");
-//
-//                    } catch (TransactionNotFoundException e) {
-//                        logger.error("Failed to verify transaction: {}", transaction.getTransactionId(), e);
-//                    }
-//                })
-//                .exceptionally(ex -> {
-//                    logger.info("Payment processing failed for transaction: {}, ignoring funds update",
-//                            transaction.getTransactionId());
-//                    return null;
-//                });
+        paymentProcessorService.requestPaymentForGateway(paymentRequest,transaction.getTransactionId());
 
+        verifyTransactionAndUpdateFunds(wallet,transaction.getTransactionId());
     }
 
 
     @Transactional(isolation = Isolation.SERIALIZABLE, propagation = Propagation.REQUIRES_NEW)
-    private void verifyTransactionAndUpdateFunds(Wallet wallet, Long transactionId) throws TransactionNotFoundException {
+    private void verifyTransactionAndUpdateFunds(Wallet wallet, Long transactionId) throws TransactionNotFoundException, RollbackException {
         var transaction = transactionService.findTransactionById(transactionId);
         if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL)) {
-            walletRepository.addFunds(wallet.getWalletId(), transaction.getAmount());
+            if(walletRepository.addFunds(wallet.getWalletId(), transaction.getAmount().longValue())>1){
+                throw new RollbackException("Update affected more than 1 row, rolling back");
+            }
             transactionService.finalizeTransaction(transaction);
         }
     }
