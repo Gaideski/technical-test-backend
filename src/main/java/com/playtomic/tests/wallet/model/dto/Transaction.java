@@ -1,7 +1,7 @@
 package com.playtomic.tests.wallet.model.dto;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
-import com.playtomic.tests.wallet.model.constants.PaymentGatewayProvider;
+import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentMethod;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import jakarta.persistence.*;
@@ -42,7 +42,7 @@ public class Transaction {
     private PaymentMethod paymentMethod;
 
     @Enumerated(EnumType.STRING)
-    private PaymentGatewayProvider provider;
+    private PaymentGateway paymentGateway;
 
     @Column(nullable = false)
     private Date createdAt;

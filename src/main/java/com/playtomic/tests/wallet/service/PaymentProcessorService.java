@@ -1,6 +1,6 @@
 package com.playtomic.tests.wallet.service;
 
-import com.playtomic.tests.wallet.model.constants.PaymentGatewayProvider;
+import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
@@ -28,15 +28,14 @@ public class PaymentProcessorService {
     public CompletableFuture<IPaymentResponse> requestPaymentForGateway(PaymentRequest paymentRequest, long transactionId) throws TransactionNotFoundException {
 
         GatewayConnection conn = selectBestProvider();
-
-        return conn.getPaymentGateway().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount()).thenApply(response-> {
-
+        // todo: Use circuit breaker here on gateway call
+        return conn.getPaymentGateway().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount()).thenApply(response -> {
             try {
                 transactionService.setProviderForTransaction(transactionId,
-                        PaymentGatewayProvider.STRIPE, response);
+                        PaymentGateway.STRIPE, response);
 
                 transactionService.updateTransactionPaymentStatus(transactionId,
-                    PaymentStatus.PROCESSING);
+                        PaymentStatus.PROCESSING);
 
                 if (response.getGatewayTransactionAmount() != null &&
                         response.getGatewayTransactionAmount().compareTo(paymentRequest.getAmount()) == 0) {
@@ -58,7 +57,7 @@ public class PaymentProcessorService {
     private GatewayConnection selectBestProvider() {
         // Use some fancying logic to determine the best available provider.
         // Sticking on Stripe for POC
-        return paymentGatewayRegistry.getProviderConnection(PaymentGatewayProvider.STRIPE);
+        return paymentGatewayRegistry.getProviderConnection(PaymentGateway.STRIPE);
     }
 
 }

@@ -1,7 +1,7 @@
 package com.playtomic.tests.wallet.service.gateways;
 
 import com.playtomic.tests.wallet.config.StripeConfigProperties;
-import com.playtomic.tests.wallet.model.constants.PaymentGatewayProvider;
+import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.service.gateways.stripe.StripeService;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.stereotype.Service;
@@ -19,7 +19,7 @@ public class PaymentsGatewayServiceFactory {
         this.restTemplateBuilder = restTemplateBuilder;
     }
 
-    public IPaymentsService createPaymentsService(PaymentGatewayProvider provider) {
+    public IPaymentsService createPaymentsService(PaymentGateway provider) {
         switch (provider) {
             case STRIPE:
                 return createStripeService();

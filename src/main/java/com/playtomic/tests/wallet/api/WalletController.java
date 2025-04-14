@@ -5,6 +5,7 @@ import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.service.WalletService;
 import jakarta.transaction.RollbackException;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -27,7 +28,7 @@ public class WalletController {
 
 
     @PostMapping("/recharge")
-    public ResponseEntity<?> depositFunds(@RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException, RollbackException {
+    public ResponseEntity<?> depositFunds(@Valid @RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException, RollbackException {
         walletService.depositFundsToAccount(paymentRequest);
         return ResponseEntity.ok(HttpStatus.ACCEPTED);
     }
@@ -36,14 +37,15 @@ public class WalletController {
     public ResponseEntity<Object> handleWalletNotFoundException(WalletNotFoundException ex) {
         Map<String, Object> body = new HashMap<>();
         body.put("message", ex.getMessage());
-
         return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
     }
 
     @GetMapping("/")
-    public ResponseEntity<?> getWallet(@RequestHeader("account_id") String accountId) {
-        var wallet = walletService.getOrCreateWalletByAccountId(accountId);
+    public ResponseEntity<?> getWallet(@RequestHeader("account_id") String accountId,
+                                       @RequestHeader("session_id") String sessionId) {
+        var wallet = walletService.getOrCreateWalletByAccountId(accountId, sessionId);
         if (wallet.isPresent()) {
+            // todo: create wallet dto for better api response
             return ResponseEntity.ok(wallet);
         }
         return ResponseEntity.internalServerError().build();

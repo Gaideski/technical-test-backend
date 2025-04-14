@@ -2,8 +2,9 @@ package com.playtomic.tests.wallet.repository;
 
 import com.playtomic.tests.wallet.model.dto.Transaction;
 import com.playtomic.tests.wallet.model.dto.Wallet;
-import jakarta.transaction.RollbackException;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -22,33 +23,33 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
 
     Optional<Wallet> findByAccountId(String accountId);
 
-    @Query(value = "SELECT w.* FROM wallets w LEFT JOIN transactions t ON w.wallet_id = t.wallet_id WHERE w.account_id = :accountId",
-            nativeQuery = true)
+    @Query("SELECT w FROM Wallet w LEFT JOIN FETCH w.transactions WHERE w.accountId = :accountId")
     Optional<Wallet> findByAccountIdWithTransactions(@Param("accountId") String accountId);
+
+    // Both below is to be used in combination to deal with concurrent updates
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT w FROM Wallet w WHERE w.walletId = :walletId")
+    Optional<Wallet> findAndLockById(@Param("walletId") Long walletId);
 
     @Modifying
     @Query(value = "UPDATE wallets SET funds = funds + :amount WHERE wallet_id = :walletId",
             nativeQuery = true)
-    @Transactional(
-            isolation = Isolation.SERIALIZABLE,
-            propagation = Propagation.MANDATORY,
-            rollbackFor = {RollbackException.class}
-    )
-    int addFunds(@Param("walletId") Long walletId, @Param("amount") Long amount) throws RollbackException;
+    @Transactional(isolation = Isolation.SERIALIZABLE, propagation = Propagation.REQUIRES_NEW)
+    int addFunds(@Param("walletId") Long walletId, @Param("amount") Long amount);
+
+    // ---------------------------------------//--------------------------------------------------
+
 
     @Modifying
-    @Transactional(propagation = Propagation.MANDATORY)
-    @Query(value = "UPDATE wallets SET funds = funds - :amount WHERE wallet_id = :walletId AND funds >= :amount",
-            nativeQuery = true)
+    @Transactional
+    @Query("UPDATE Wallet w SET w.funds = w.funds - :amount WHERE w.walletId = :walletId AND w.funds >= :amount")
     int withdrawFunds(@Param("walletId") Long walletId, @Param("amount") BigDecimal amount);
 
-    @Query(value = "SELECT * FROM transactions WHERE ttl < :now",
-            nativeQuery = true)
+    @Query("SELECT t FROM Transaction t WHERE t.ttl < :now")
     List<Transaction> findExpiredTransactions(@Param("now") Date now);
 
     @Modifying
     @Transactional
-    @Query(value = "DELETE FROM transactions WHERE ttl < :now",
-            nativeQuery = true)
+    @Query("DELETE FROM Transaction t WHERE t.ttl < :now")
     int deleteExpiredTransactions(@Param("now") Date now);
 }

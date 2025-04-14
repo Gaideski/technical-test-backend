@@ -2,7 +2,7 @@ package com.playtomic.tests.wallet.service.gateways.stripe;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.playtomic.tests.wallet.model.annotation.PaymentService;
-import com.playtomic.tests.wallet.model.constants.PaymentGatewayProvider;
+import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.exceptions.StripeServiceException;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.model.responses.stripe.StripePaymentResponse;
@@ -30,7 +30,7 @@ import java.util.concurrent.CompletionException;
  * A real implementation would call to String using their API/SDK.
  * This dummy implementation throws an error when trying to charge less than 10€.
  */
-@PaymentService(PaymentGatewayProvider.STRIPE)
+@PaymentService(PaymentGateway.STRIPE)
 @Service
 public class StripeService implements IPaymentsService {
 

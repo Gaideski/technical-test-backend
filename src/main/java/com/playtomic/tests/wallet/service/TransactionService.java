@@ -1,6 +1,6 @@
 package com.playtomic.tests.wallet.service;
 
-import com.playtomic.tests.wallet.model.constants.PaymentGatewayProvider;
+import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import com.playtomic.tests.wallet.model.dto.Transaction;
 import com.playtomic.tests.wallet.model.dto.Wallet;
@@ -41,10 +41,10 @@ public class TransactionService {
 
     @Transactional(isolation = Isolation.SERIALIZABLE,
             propagation = Propagation.REQUIRES_NEW)
-    public void setProviderForTransaction(long transactionId, PaymentGatewayProvider provider, IPaymentResponse response) throws TransactionNotFoundException {
+    public void setProviderForTransaction(long transactionId, PaymentGateway gateway, IPaymentResponse response) throws TransactionNotFoundException {
         var transaction = findTransactionById(transactionId);
 
-        transaction.setProvider(provider);
+        transaction.setPaymentGateway(gateway);
         transaction.setPaymentStatus(PaymentStatus.SUBMITTED);
         transaction.setProviderTransactionId(response.getGatewayTransactionID());
         transactionRepository.save(transaction);
@@ -73,4 +73,14 @@ public class TransactionService {
         transaction.setPaymentStatus(PaymentStatus.FINALIZED);
         transactionRepository.save(transaction);
     }
+
+    // TODO: create cron task that polls the database for status and take action
+    // Created -> submit payment
+    // Submitted -> Expire (we don't have a way to validate the status if crashed)
+    // Successful or Processing -> Update wallet (using both as same for POC purposes)
+
+
+    // TODO: create cron task that polls the database for ttl and take action
+    // delete older transactions
+
 }

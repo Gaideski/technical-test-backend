@@ -1,6 +1,6 @@
 package com.playtomic.tests.wallet.model.constants;
 
-public enum PaymentGatewayProvider {
+public enum PaymentGateway {
     STRIPE,
     CHECKOUT,
     PAYPAL

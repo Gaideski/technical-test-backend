@@ -11,10 +11,8 @@ import jakarta.transaction.RollbackException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,13 +28,16 @@ public class WalletService {
     private final TransactionService transactionService;
     private final Logger logger = LoggerFactory.getLogger(WalletService.class);
 
-    public Optional<WalletResponse> getOrCreateWalletByAccountId(String accountId) {
+    //TODO: create validations:
+
+
+    public Optional<WalletResponse> getOrCreateWalletByAccountId(String accountId, String sessionId) {
         Optional<Wallet> wallet = walletRepository.findByAccountIdWithTransactions(accountId);
-        return wallet.isPresent() ? formatWalletForResponse(wallet) : createNewWallet(accountId);
+        return wallet.isPresent() ? formatWalletForResponse(wallet) : createNewWallet(accountId, sessionId);
     }
 
     @Transactional
-    public Optional<WalletResponse> createNewWallet(String accountId) {
+    public Optional<WalletResponse> createNewWallet(String accountId, String sessionId) {
         try {
             Wallet newWallet = new Wallet();
             newWallet.setFunds(BigDecimal.ZERO);
@@ -44,7 +45,7 @@ public class WalletService {
             walletRepository.save(newWallet);
             return formatWalletForResponse(walletRepository.findByAccountIdWithTransactions(accountId));
         } catch (DataAccessException ex) {
-            logger.error("Failed to create wallet", ex);
+            logger.error("Failed to create wallet for account {} under session: {}", accountId, sessionId, ex);
             return Optional.empty();
         }
     }
@@ -56,25 +57,42 @@ public class WalletService {
                         value.getTransactions()));
     }
 
-    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException, RollbackException {
+    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException {
         // sync submission to database
         var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
                 .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
 
         var transaction = transactionService.createInitialTransaction(wallet, paymentRequest);
 
-        paymentProcessorService.requestPaymentForGateway(paymentRequest,transaction.getTransactionId());
-
-        verifyTransactionAndUpdateFunds(wallet,transaction.getTransactionId());
+        // Async flow
+        paymentProcessorService.requestPaymentForGateway(paymentRequest, transaction.getTransactionId())
+                .thenApply(
+                        response -> {
+                            try {
+                                verifyTransactionAndUpdateFunds(wallet, transaction.getTransactionId());
+                            } catch (TransactionNotFoundException | RollbackException | WalletNotFoundException e) {
+                                throw new RuntimeException(e);
+                            }
+                            return null;
+                        }
+                );
     }
 
 
     @Transactional(isolation = Isolation.SERIALIZABLE, propagation = Propagation.REQUIRES_NEW)
-    private void verifyTransactionAndUpdateFunds(Wallet wallet, Long transactionId) throws TransactionNotFoundException, RollbackException {
+    private void verifyTransactionAndUpdateFunds(Wallet wallet, Long transactionId) throws TransactionNotFoundException, RollbackException, WalletNotFoundException {
+        //Todo: Hold account here using locking to update the amount
         var transaction = transactionService.findTransactionById(transactionId);
+
         if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL)) {
-            if(walletRepository.addFunds(wallet.getWalletId(), transaction.getAmount().longValue())>1){
-                throw new RollbackException("Update affected more than 1 row, rolling back");
+            walletRepository.findAndLockById(wallet.getWalletId())
+                    .orElseThrow(() -> new WalletNotFoundException(wallet.getWalletId().toString()));
+
+            int updated = walletRepository.addFunds(wallet.getWalletId(), transaction.getAmount().longValue());
+
+            if (updated != 1) {
+                //TODO: Doesn't rollback, fix it!
+                throw new IllegalStateException("Failed to update wallet funds");
             }
             transactionService.finalizeTransaction(transaction);
         }

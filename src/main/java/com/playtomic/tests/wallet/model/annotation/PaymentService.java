@@ -1,6 +1,6 @@
 package com.playtomic.tests.wallet.model.annotation;
 
-import com.playtomic.tests.wallet.model.constants.PaymentGatewayProvider;
+import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 
 import java.lang.annotation.*;
 
@@ -8,5 +8,5 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface PaymentService {
-    PaymentGatewayProvider value();
+    PaymentGateway value();
 }

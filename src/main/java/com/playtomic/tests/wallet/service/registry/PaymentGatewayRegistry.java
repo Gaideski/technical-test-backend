@@ -1,7 +1,7 @@
 package com.playtomic.tests.wallet.service.registry;
 
 import com.playtomic.tests.wallet.model.annotation.PaymentService;
-import com.playtomic.tests.wallet.model.constants.PaymentGatewayProvider;
+import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
 import com.playtomic.tests.wallet.service.gateways.IPaymentsService;
 import org.springframework.aop.support.AopUtils;
@@ -15,11 +15,11 @@ import java.util.Map;
 
 @Service
 public class PaymentGatewayRegistry {
-    private final Map<PaymentGatewayProvider, GatewayConnection> paymentsProviderMap;
+    private final Map<PaymentGateway, GatewayConnection> paymentsProviderMap;
 
     @Autowired
     public PaymentGatewayRegistry(ApplicationContext applicationContext) {
-        this.paymentsProviderMap = new EnumMap<>(PaymentGatewayProvider.class);
+        this.paymentsProviderMap = new EnumMap<>(PaymentGateway.class);
 
         // Get all beans that implement IPaymentsService
         Map<String, IPaymentsService> paymentServices =
@@ -41,7 +41,7 @@ public class PaymentGatewayRegistry {
         });
     }
 
-    public GatewayConnection getProviderConnection(PaymentGatewayProvider provider) {
+    public GatewayConnection getProviderConnection(PaymentGateway provider) {
         return paymentsProviderMap.get(provider);
     }
 
