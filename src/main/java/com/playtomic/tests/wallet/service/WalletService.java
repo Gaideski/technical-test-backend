@@ -79,17 +79,13 @@ public class WalletService {
     }
 
 
-    @Transactional(isolation = Isolation.SERIALIZABLE, propagation = Propagation.REQUIRES_NEW)
     private void verifyTransactionAndUpdateFunds(Wallet wallet, Long transactionId) throws TransactionNotFoundException, RollbackException, WalletNotFoundException {
         //Todo: Hold account here using locking to update the amount
         var transaction = transactionService.findTransactionById(transactionId);
 
         if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL)) {
-            walletRepository.findAndLockById(wallet.getWalletId())
-                    .orElseThrow(() -> new WalletNotFoundException(wallet.getWalletId().toString()));
 
             int updated = walletRepository.addFunds(wallet.getWalletId(), transaction.getAmount().longValue());
-
             if (updated != 1) {
                 //TODO: Doesn't rollback, fix it!
                 throw new IllegalStateException("Failed to update wallet funds");

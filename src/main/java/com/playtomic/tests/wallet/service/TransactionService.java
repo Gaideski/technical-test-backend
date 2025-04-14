@@ -67,7 +67,7 @@ public class TransactionService {
                 () -> new TransactionNotFoundException(transactionId));
     }
 
-    @Transactional(propagation = Propagation.MANDATORY)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void finalizeTransaction(Transaction transaction) {
         transaction.setFinishedAt(new Date());
         transaction.setPaymentStatus(PaymentStatus.FINALIZED);

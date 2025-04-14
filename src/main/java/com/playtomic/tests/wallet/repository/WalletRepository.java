@@ -26,13 +26,15 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("SELECT w FROM Wallet w LEFT JOIN FETCH w.transactions WHERE w.accountId = :accountId")
     Optional<Wallet> findByAccountIdWithTransactions(@Param("accountId") String accountId);
 
-    // Both below is to be used in combination to deal with concurrent updates
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT w FROM Wallet w WHERE w.walletId = :walletId")
-    Optional<Wallet> findAndLockById(@Param("walletId") Long walletId);
-
     @Modifying
-    @Query(value = "UPDATE wallets SET funds = funds + :amount WHERE wallet_id = :walletId",
+    @Query(value = """
+    UPDATE wallets\s
+    SET funds = funds + :amount\s
+    WHERE wallet_id = :walletId
+    AND wallet_id IN (
+        SELECT wallet_id FROM wallets WHERE wallet_id = :walletId FOR UPDATE
+    )
+   \s""",
             nativeQuery = true)
     @Transactional(isolation = Isolation.SERIALIZABLE, propagation = Propagation.REQUIRES_NEW)
     int addFunds(@Param("walletId") Long walletId, @Param("amount") Long amount);
