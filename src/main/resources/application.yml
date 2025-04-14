@@ -4,14 +4,27 @@ server:
 ---
 spring.config.activate.on-profile: develop
 spring:
+  h2:
+    console:
+      enabled: true
   jpa:
     show_sql: false
     database: H2
+    database-platform: org.hibernate.dialect.H2Dialect
+    open-in-view: false
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_ON_EXIT=FALSE;IGNORECASE=TRUE
+    username: sa
+    #password: password
+    driverClassName: org.h2.Driver
     initialize: false
-stripe.simulator.charges-uri: https://sandbox.playtomic.io/v1/stripe-simulator/charges
-stripe.simulator.refunds-uri: https://sandbox.playtomic.io/v1/stripe-simulator/payments/{payment_id}/refunds
+    hikari:
+      auto-commit: false
+payment-gateways:
+  stripe:
+    simulator:
+      charges-uri: https://sandbox.playtomic.io/v1/stripe-simulator/charges
+      refunds-uri: https://sandbox.playtomic.io/v1/stripe-simulator/payments/{payment_id}/refunds
 ---
 spring.config.activate.on-profile: test
 spring:
@@ -21,5 +34,11 @@ spring:
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_ON_EXIT=FALSE;IGNORECASE=TRUE
     initialize: false
-stripe.simulator.charges-uri: http://localhost:9999
-stripe.simulator.refunds-uri: http://localhost:9999
+    hikari:
+      auto-commit: false
+    open-in-view: false
+payment-gateways:
+  stripe:
+    simulator:
+      charges-uri: http://localhost:9999
+      refunds-uri: http://localhost:9999
