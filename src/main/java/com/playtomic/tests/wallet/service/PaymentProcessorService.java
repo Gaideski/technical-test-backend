@@ -23,10 +23,9 @@ public class PaymentProcessorService {
     private final PaymentGatewayRegistry paymentGatewayRegistry;
     private final Logger logger = LoggerFactory.getLogger(PaymentProcessorService.class);
     private final TransactionService transactionService;
-    private final TransactionTemplate transactionTemplate;
 
 
-    public CompletableFuture<IPaymentResponse> requestPaymentForGateway(PaymentRequest paymentRequest, long transactionId) throws TransactionNotFoundException {
+    public CompletableFuture<IPaymentResponse> requestPaymentForGateway(PaymentRequest paymentRequest, long transactionId) {
 
         GatewayConnection conn = selectBestProvider();
         // todo: Use circuit breaker here on gateway call

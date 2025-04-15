@@ -5,7 +5,7 @@ import com.playtomic.tests.wallet.model.dto.Wallet;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
-import com.playtomic.tests.wallet.model.responses.WalletResponse;
+import com.playtomic.tests.wallet.model.responses.WalletDto;
 import com.playtomic.tests.wallet.repository.WalletRepository;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
@@ -29,30 +29,29 @@ public class WalletService {
     //TODO: create validations:
 
 
-    public Optional<WalletResponse> getOrCreateWalletByAccountId(String accountId, String sessionId) {
+    public WalletDto getOrCreateWalletByAccountId(String accountId, String sessionId) throws WalletNotFoundException {
         Optional<Wallet> wallet = walletRepository.findByAccountIdWithTransactions(accountId);
-        return wallet.isPresent() ? formatWalletForResponse(wallet) : createNewWallet(accountId, sessionId);
+        return wallet.isPresent() ? formatWalletForResponse(wallet.get()) : createNewWallet(accountId, sessionId);
     }
 
     @Transactional
-    public Optional<WalletResponse> createNewWallet(String accountId, String sessionId) {
+    public WalletDto createNewWallet(String accountId, String sessionId) throws WalletNotFoundException {
         try {
             Wallet newWallet = new Wallet();
             newWallet.setFunds(BigDecimal.ZERO);
             newWallet.setAccountId(accountId);
             walletRepository.save(newWallet);
-            return formatWalletForResponse(walletRepository.findByAccountIdWithTransactions(accountId));
+            return formatWalletForResponse(walletRepository.save(newWallet));
         } catch (DataAccessException ex) {
             logger.error("Failed to create wallet for account {} under session: {}", accountId, sessionId, ex);
-            return Optional.empty();
+            return null;
         }
     }
 
-    private Optional<WalletResponse> formatWalletForResponse(Optional<Wallet> wallet) {
-        return wallet.map(value ->
-                new WalletResponse(value.getAccountId(),
-                        value.getFunds(),
-                        value.getTransactions()));
+    private WalletDto formatWalletForResponse(Wallet wallet) {
+        return new WalletDto(wallet.getAccountId(),
+                wallet.getFunds(),
+                wallet.getTransactions());
     }
 
     public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException {

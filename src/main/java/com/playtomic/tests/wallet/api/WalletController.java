@@ -28,7 +28,7 @@ public class WalletController {
 
 
     @PostMapping("/recharge")
-    public ResponseEntity<?> depositFunds(@Valid @RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException, RollbackException {
+    public ResponseEntity<?> depositFunds(@Valid @RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException {
         walletService.depositFundsToAccount(paymentRequest);
         return ResponseEntity.ok(HttpStatus.ACCEPTED);
     }
@@ -42,10 +42,9 @@ public class WalletController {
 
     @GetMapping("/")
     public ResponseEntity<?> getWallet(@RequestHeader("account_id") String accountId,
-                                       @RequestHeader("session_id") String sessionId) {
+                                       @RequestHeader("session_id") String sessionId) throws WalletNotFoundException {
         var wallet = walletService.getOrCreateWalletByAccountId(accountId, sessionId);
-        if (wallet.isPresent()) {
-            // todo: create wallet dto for better api response
+        if (wallet != null) {
             return ResponseEntity.ok(wallet);
         }
         return ResponseEntity.internalServerError().build();
