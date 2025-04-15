@@ -3,15 +3,37 @@ package com.playtomic.tests.wallet.utils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CardUtilsTest {
+
+    private static Stream<Object[]> provideCardNumbersForMasking() {
+        return Stream.of(
+                new Object[]{"1234567890123456", "************3456"},
+                new Object[]{"4111111111111111", "************1111"},
+                new Object[]{"378282246310005", "***********0005"},
+                new Object[]{"6011111111111117", "************1117"},
+                new Object[]{"5555555555554444", "************4444"}
+        );
+    }
+
+    private static Stream<Object[]> provideBytesForHexConversion() {
+        return Stream.of(
+                new Object[]{new byte[]{0}, "00"},
+                new Object[]{new byte[]{127}, "7f"},
+                new Object[]{new byte[]{-128}, "80"},
+                new Object[]{new byte[]{0, 1, 2, 3, 4}, "0001020304"},
+                new Object[]{new byte[]{-1, -2, -3, -4}, "fffefdfc"},
+                new Object[]{"Hello".getBytes(StandardCharsets.UTF_8), "48656c6c6f"},
+                new Object[]{new byte[]{0x12, 0x34, 0x56, 0x78}, "12345678"}
+        );
+    }
 
     // Test cases for maskCardNumber()
     @ParameterizedTest
@@ -24,16 +46,6 @@ class CardUtilsTest {
     @MethodSource("provideCardNumbersForMasking")
     void maskCardNumber_validInputs_properlyMasked(String input, String expected) {
         assertEquals(expected, CardUtils.maskCardNumber(input));
-    }
-
-    private static Stream<Object[]> provideCardNumbersForMasking() {
-        return Stream.of(
-                new Object[]{"1234567890123456", "************3456"},
-                new Object[]{"4111111111111111", "************1111"},
-                new Object[]{"378282246310005", "***********0005"},
-                new Object[]{"6011111111111117", "************1117"},
-                new Object[]{"5555555555554444", "************4444"}
-        );
     }
 
     @Test
@@ -65,18 +77,6 @@ class CardUtilsTest {
     @MethodSource("provideBytesForHexConversion")
     void bytesToHex_variousInputs_correctConversion(byte[] input, String expected) {
         assertEquals(expected, CardUtils.bytesToHex(input));
-    }
-
-    private static Stream<Object[]> provideBytesForHexConversion() {
-        return Stream.of(
-                new Object[]{new byte[]{0}, "00"},
-                new Object[]{new byte[]{127}, "7f"},
-                new Object[]{new byte[]{-128}, "80"},
-                new Object[]{new byte[]{0, 1, 2, 3, 4}, "0001020304"},
-                new Object[]{new byte[]{-1, -2, -3, -4}, "fffefdfc"},
-                new Object[]{"Hello".getBytes(StandardCharsets.UTF_8), "48656c6c6f"},
-                new Object[]{new byte[]{0x12, 0x34, 0x56, 0x78}, "12345678"}
-        );
     }
 
     @Test

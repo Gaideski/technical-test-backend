@@ -70,13 +70,12 @@ public class TransactionService {
     }
 
     @Transactional(isolation = Isolation.SERIALIZABLE,
-                    propagation = Propagation.REQUIRES_NEW)
+            propagation = Propagation.REQUIRES_NEW)
     public void finalizeTransaction(Transaction transaction) {
         transaction.setFinishedAt(new Date());
         transaction.setPaymentStatus(PaymentStatus.FINALIZED);
         transactionRepository.save(transaction);
     }
-
 
 
 }

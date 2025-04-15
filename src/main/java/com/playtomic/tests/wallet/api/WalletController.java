@@ -4,7 +4,6 @@ import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.service.WalletService;
-import jakarta.transaction.RollbackException;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

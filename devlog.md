@@ -71,3 +71,39 @@ to handle more providers in the future.
 | **Advanced Cases**     |                    |                                   |                     |                        |
 | Idempotency Key Reuse  | Ignored            | (Optional) Implement              | Client-side         | Not required           |
 
+Development ideas:
+
+Transaction status:
+CREATED; SUBMITTED; SUCCESSFUL; FINALIZED; DENIED;
+
+Payment method? Add for future
+
+Support for multiple gateways (use factory)
+Support circuit-breaker during charge call
+
+Outside of scope:
+User creation -> Will create a new user when performing get (if not exists)
+Credit card/founds validation
+Denied payment flow
+
+Top-up flow:
+Wallet must exist, if not throws error (404 for wallet not found)
+sync:
+create transaction
+call async flow and return with accepted 201
+
+async flow
+Submit payment request with CompletableFuture
+fill the transaction details from payment response
+If transaction success, update wallet
+
+Get wallet flow:
+If wallet does not exist for given user, create a new one
+return wallet containing last 10 transactions
+
+Cron jobs:
+Resubmit transactions that were not submitted (created)
+Check for transaction that were submitted but doesn't have response
+Update wallets for transactions that were not finalized (successful)
+Cleanup older transaction (ttl 30 days)
+

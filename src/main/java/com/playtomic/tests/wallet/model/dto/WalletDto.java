@@ -14,11 +14,11 @@ public class WalletDto {
     private BigDecimal funds;
     private List<TransactionDto> recentTransactions;
 
-    public WalletDto(Wallet wallet){
-        this.walletId=wallet.getWalletId();
-        this.funds=wallet.getFunds();
-        this.accountId=wallet.getAccountId();
-        if(!wallet.getTransactions().isEmpty()){
+    public WalletDto(Wallet wallet) {
+        this.walletId = wallet.getWalletId();
+        this.funds = wallet.getFunds();
+        this.accountId = wallet.getAccountId();
+        if (!wallet.getTransactions().isEmpty()) {
             setTransactions(wallet.getTransactions());
         }
     }

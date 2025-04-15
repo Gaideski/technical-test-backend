@@ -7,10 +7,12 @@ import com.playtomic.tests.wallet.model.constants.PaymentType;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 
 @Getter
+@Setter
 public class PaymentRequest {
 
     // HARDCODED FOR POC

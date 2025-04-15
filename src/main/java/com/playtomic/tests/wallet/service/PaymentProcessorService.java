@@ -14,11 +14,8 @@ import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 @Service
 @AllArgsConstructor
@@ -48,11 +45,8 @@ public class PaymentProcessorService {
                 logger.warn("Transaction not found during fallback", e);
             }
 
-            // Create and return a failed payment response
-            IPaymentResponse failedResponse = new DefaultPaymentResponse(); // Replace with your actual implementation
-            // Set appropriate failure details on the response
 
-            return failedResponse;
+            return (IPaymentResponse) new DefaultPaymentResponse();
         }).thenApply(response -> {
             try {
                 transactionService.setProviderForTransaction(transactionId,

@@ -4,9 +4,7 @@ import com.playtomic.tests.wallet.model.annotation.PaymentService;
 import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
 import com.playtomic.tests.wallet.service.gateways.IPaymentsService;
-
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +12,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -40,7 +37,6 @@ public class PaymentGatewayRegistry {
                     targetClass, PaymentService.class);
 
             if (annotation != null) {
-                // Create a named circuit breaker for this payment service
                 CircuitBreaker circuitBreaker = this.circuitBreakerRegistry.circuitBreaker(
                         annotation.value().name() + "-circuit-breaker");
 
