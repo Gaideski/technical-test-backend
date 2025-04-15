@@ -1,6 +1,6 @@
 package com.playtomic.tests.wallet.utils;
 
-public class cardUtils {
+public class CardUtils {
 
     public static String maskCardNumber(String cardNumber) {
         // Keep only the last 4 digits of card number

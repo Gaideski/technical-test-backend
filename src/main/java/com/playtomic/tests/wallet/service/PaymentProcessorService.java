@@ -7,6 +7,7 @@ import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
 import com.playtomic.tests.wallet.service.registry.PaymentGatewayRegistry;
+import com.playtomic.tests.wallet.utils.CardUtils;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,7 @@ public class PaymentProcessorService {
         return conn.getPaymentGateway().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount()).thenApply(response -> {
             try {
                 transactionService.setProviderForTransaction(transactionId,
+                        CardUtils.maskCardNumber(paymentRequest.getCardNumber()),
                         PaymentGateway.STRIPE, response);
 
                 transactionService.updateTransactionPaymentStatus(transactionId,

@@ -2,15 +2,11 @@ package com.playtomic.tests.wallet.repository;
 
 import com.playtomic.tests.wallet.model.dto.Transaction;
 import com.playtomic.tests.wallet.model.dto.Wallet;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -26,21 +22,8 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("SELECT w FROM Wallet w LEFT JOIN FETCH w.transactions WHERE w.accountId = :accountId")
     Optional<Wallet> findByAccountIdWithTransactions(@Param("accountId") String accountId);
 
-    @Modifying
-    @Query(value = """
-    UPDATE wallets\s
-    SET funds = funds + :amount\s
-    WHERE wallet_id = :walletId
-    AND wallet_id IN (
-        SELECT wallet_id FROM wallets WHERE wallet_id = :walletId FOR UPDATE
-    )
-   \s""",
-            nativeQuery = true)
-    @Transactional(isolation = Isolation.SERIALIZABLE, propagation = Propagation.REQUIRES_NEW)
-    int addFunds(@Param("walletId") Long walletId, @Param("amount") Long amount);
-
-    // ---------------------------------------//--------------------------------------------------
-
+    @Query("SELECT w FROM Wallet w WHERE w.walletId = :walletId")
+    Optional<Wallet> findById(@Param("walletId") Long walletId);
 
     @Modifying
     @Transactional

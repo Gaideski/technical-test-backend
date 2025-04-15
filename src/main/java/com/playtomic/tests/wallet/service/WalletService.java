@@ -7,14 +7,12 @@ import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.model.responses.WalletResponse;
 import com.playtomic.tests.wallet.repository.WalletRepository;
-import jakarta.transaction.RollbackException;
+import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -69,8 +67,8 @@ public class WalletService {
                 .thenApply(
                         response -> {
                             try {
-                                verifyTransactionAndUpdateFunds(wallet, transaction.getTransactionId());
-                            } catch (TransactionNotFoundException | RollbackException | WalletNotFoundException e) {
+                                verifyTransactionAndUpdateFunds(wallet.getWalletId(), transaction.getTransactionId());
+                            } catch (TransactionNotFoundException | WalletNotFoundException e) {
                                 throw new RuntimeException(e);
                             }
                             return null;
@@ -79,18 +77,45 @@ public class WalletService {
     }
 
 
-    private void verifyTransactionAndUpdateFunds(Wallet wallet, Long transactionId) throws TransactionNotFoundException, RollbackException, WalletNotFoundException {
-        //Todo: Hold account here using locking to update the amount
-        var transaction = transactionService.findTransactionById(transactionId);
+    @Transactional
+    private void verifyTransactionAndUpdateFunds(Long walletId, Long transactionId) throws TransactionNotFoundException, WalletNotFoundException {
+        final int MAX_RETRIES = 3;
+        int retryCount = 0;
 
-        if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL)) {
+        while (retryCount < MAX_RETRIES) {
+            try {
+                // Get the latest transaction state
+                var transaction = transactionService.findTransactionById(transactionId);
 
-            int updated = walletRepository.addFunds(wallet.getWalletId(), transaction.getAmount().longValue());
-            if (updated != 1) {
-                //TODO: Doesn't rollback, fix it!
-                throw new IllegalStateException("Failed to update wallet funds");
+                if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL)) {
+                    // Get the latest wallet state
+                    Wallet currentWallet = walletRepository.findById(walletId)
+                            .orElseThrow(() -> new WalletNotFoundException("Wallet not found"));
+
+                    currentWallet.setFunds(currentWallet.getFunds().add(transaction.getAmount()));
+
+                    walletRepository.save(currentWallet);
+
+                    transactionService.finalizeTransaction(transaction);
+
+                    return;
+                } else {
+                    // Transaction status doesn't require action here
+                    return;
+                }
+            } catch (OptimisticLockException e) {
+                // Optimistic lock exception - another process modified the wallet
+                retryCount++;
+                if (retryCount >= MAX_RETRIES) {
+                    throw new IllegalStateException("Failed to update wallet funds after " + MAX_RETRIES + " attempts", e);
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Retry interrupted", ie);
+                }
             }
-            transactionService.finalizeTransaction(transaction);
         }
     }
 

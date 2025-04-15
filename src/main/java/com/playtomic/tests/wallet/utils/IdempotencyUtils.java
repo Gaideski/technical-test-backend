@@ -5,16 +5,14 @@ import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-import static com.playtomic.tests.wallet.utils.cardUtils.bytesToHex;
-import static com.playtomic.tests.wallet.utils.cardUtils.maskCardNumber;
+import static com.playtomic.tests.wallet.utils.CardUtils.bytesToHex;
 
 public class IdempotencyUtils {
 
-    public static String generateIdempotencykey(PaymentRequest request) {
+    public static String generateIdempotenceKey(PaymentRequest request) {
         String rawKey = String.format(
-                "%s-%s-%s-%s",
+                "%s-%s-%s",
                 request.getAccountId(),
-                maskCardNumber(request.getCardNumber()),
                 request.getAmount(),
                 request.getSessionId()
         );

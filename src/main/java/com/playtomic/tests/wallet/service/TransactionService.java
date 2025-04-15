@@ -5,10 +5,10 @@ import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import com.playtomic.tests.wallet.model.dto.Transaction;
 import com.playtomic.tests.wallet.model.dto.Wallet;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
-import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.repository.TransactionRepository;
+import com.playtomic.tests.wallet.utils.IdempotencyUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -24,14 +24,14 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
 
 
-    public Transaction createInitialTransaction(Wallet wallet, PaymentRequest paymentRequest) throws WalletNotFoundException {
+    public Transaction createInitialTransaction(Wallet wallet, PaymentRequest paymentRequest) {
 
         Transaction transaction = new Transaction();
         transaction.setWallet(wallet);
         transaction.setAmount(paymentRequest.getAmount());
         transaction.setPaymentMethod(paymentRequest.getPaymentMethod());
         transaction.setPaymentStatus(PaymentStatus.CREATED);
-        transaction.setIdempotencyKey(paymentRequest.getSessionId()); // Using sessionId as idempotency key
+        transaction.setIdempotencyKey(IdempotencyUtils.generateIdempotenceKey(paymentRequest)); // Using sessionId as idempotency key
 
         // Payment provider will be set by the paymentProcessor after getting the suitable provider
 
@@ -41,12 +41,12 @@ public class TransactionService {
 
     @Transactional(isolation = Isolation.SERIALIZABLE,
             propagation = Propagation.REQUIRES_NEW)
-    public void setProviderForTransaction(long transactionId, PaymentGateway gateway, IPaymentResponse response) throws TransactionNotFoundException {
+    public void setProviderForTransaction(long transactionId, String credit_card, PaymentGateway gateway, IPaymentResponse response) throws TransactionNotFoundException {
         var transaction = findTransactionById(transactionId);
-
         transaction.setPaymentGateway(gateway);
         transaction.setPaymentStatus(PaymentStatus.SUBMITTED);
-        transaction.setProviderTransactionId(response.getGatewayTransactionID());
+        transaction.setPaymentGatewayTransactionId(response.getGatewayTransactionID());
+        transaction.setMaskedCard(credit_card);
         transactionRepository.save(transaction);
     }
 

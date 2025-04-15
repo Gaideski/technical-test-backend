@@ -31,6 +31,9 @@ public class Wallet {
     @Column(nullable = false)
     private BigDecimal funds = BigDecimal.ZERO;
 
+    @Version
+    private Long version;
+
     @Column(nullable = false)
     private Date createdAt;
 

@@ -26,7 +26,7 @@ public class Transaction {
     private String idempotencyKey;
 
     @Column(unique = true)
-    private String providerTransactionId;
+    private String paymentGatewayTransactionId;
 
     @JsonBackReference
     @ManyToOne(fetch = FetchType.LAZY)
@@ -36,6 +36,9 @@ public class Transaction {
     @NonNull
     @Column(nullable = false)
     private BigDecimal amount;
+
+    @Column
+    private String maskedCard;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
@@ -49,6 +52,7 @@ public class Transaction {
 
     @Column
     private Date finishedAt;
+
 
     // It holds the last status for a given order.
     // In a production env, it should capture the changes for this field using CDC to populate an transactionHistory service
@@ -80,6 +84,10 @@ public class Transaction {
                 "transactionId=" + transactionId +
                 ", amount=" + amount +
                 ", status=" + paymentStatus +
+                ", paymentMethod=" + paymentMethod +
+                ", paymentGateway=" + paymentGateway +
+                ", createdAt=" + createdAt +
+                ", finishedAt=" + finishedAt +
                 '}';
     }
 }
