@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 
 @Getter
 @Setter
-public class PaymentRequest {
+public class PaymentRequest implements IPaymentRequest {
 
     // HARDCODED FOR POC
     private final @NonNull PaymentMethod paymentMethod = PaymentMethod.CARD;

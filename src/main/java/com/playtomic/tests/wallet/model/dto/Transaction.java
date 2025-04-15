@@ -11,8 +11,10 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 
 @Data
 @Entity
@@ -72,6 +74,16 @@ public class Transaction {
     //TTL so this entry may be deleted and not overcrowd our wallet service db without need
     @Column(nullable = false)
     private Date ttl;
+
+    // Idea for refund. When refund is issued, we can fill both fields to correlate them
+    // This will help to track the refund, as well avoid any foreign key issues when deleting older transactions
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "original_transaction_id")
+    private Transaction originalTransaction;
+
+    @OneToMany(mappedBy = "originalTransaction", cascade = CascadeType.ALL)
+    private List<Transaction> refundTransactions = new ArrayList<>();
+
 
     @PrePersist
     protected void onCreate() {

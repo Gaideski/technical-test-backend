@@ -75,6 +75,7 @@ Development ideas:
 
 Transaction status:
 CREATED; SUBMITTED; SUCCESSFUL; FINALIZED; DENIED;
+Control the status transition by some sort of state machine
 
 Payment method? Add for future
 

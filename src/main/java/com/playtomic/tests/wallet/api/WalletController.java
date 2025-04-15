@@ -1,6 +1,6 @@
 package com.playtomic.tests.wallet.api;
 
-import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
+import com.playtomic.tests.wallet.model.exceptions.InvalidTransactionStatusException;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.service.WalletService;
@@ -27,7 +27,7 @@ public class WalletController {
 
 
     @PostMapping("/recharge")
-    public ResponseEntity<?> depositFunds(@Valid @RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException {
+    public ResponseEntity<?> depositFunds(@Valid @RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException {
         walletService.depositFundsToAccount(paymentRequest);
         return ResponseEntity.ok(HttpStatus.ACCEPTED);
     }

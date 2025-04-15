@@ -11,6 +11,6 @@ public class DefaultPaymentResponse implements IPaymentResponse {
 
     @Override
     public BigDecimal getGatewayTransactionAmount() {
-        return null;
+        return BigDecimal.ZERO;
     }
 }

@@ -4,6 +4,8 @@ import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import com.playtomic.tests.wallet.model.dto.Transaction;
 import com.playtomic.tests.wallet.model.dto.Wallet;
 import com.playtomic.tests.wallet.model.dto.WalletDto;
+import com.playtomic.tests.wallet.model.eventpublisher.TransactionStatusChangedEvent;
+import com.playtomic.tests.wallet.model.exceptions.InvalidTransactionStatusException;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
@@ -12,6 +14,7 @@ import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,29 +56,29 @@ public class WalletService {
         return new WalletDto(wallet);
     }
 
-    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException {
+    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException {
         // sync submission to database
         var transaction = initiateTransaction(paymentRequest);
 
         // Async flow
-        paymentProcessorService.requestPaymentForGateway(paymentRequest, transaction.getTransactionId())
-                .thenApply(
-                        response -> {
-                            try {
-                                verifyTransactionAndUpdateFunds(transaction.getWallet().getWalletId(), transaction.getTransactionId());
-                            } catch (TransactionNotFoundException | WalletNotFoundException e) {
-                                throw new RuntimeException(e);
-                            }
-                            return null;
-                        }
-                );
+        paymentProcessorService.requestPaymentForGateway(paymentRequest, transaction.getTransactionId());
     }
 
-    private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException {
+    private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException {
         var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
                 .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
 
         return transactionService.createInitialTransaction(wallet, paymentRequest);
+    }
+
+    // Listening to all events here, Ideally different events will go to different listeners.
+    // In memory version of queue/async processing.
+    @EventListener
+    @Transactional
+    public void handleTransactionStatusChange(TransactionStatusChangedEvent event) throws WalletNotFoundException, TransactionNotFoundException {
+        if (event.getNewStatus() == PaymentStatus.SUCCESSFUL) {
+            verifyTransactionAndUpdateFunds(event.getWalletId(), event.getTransactionId());
+        }
     }
 
     @Transactional
@@ -100,11 +103,11 @@ public class WalletService {
                     transactionService.finalizeTransaction(transaction);
 
                     return;
+
                 } else {
                     // Transaction status doesn't require action here
-                    return;
                 }
-            } catch (OptimisticLockException e) {
+            } catch (OptimisticLockException | InvalidTransactionStatusException e) {
                 // Optimistic lock exception - another process modified the wallet
                 retryCount++;
                 if (retryCount >= MAX_RETRIES) {
@@ -119,6 +122,4 @@ public class WalletService {
             }
         }
     }
-
-
 }

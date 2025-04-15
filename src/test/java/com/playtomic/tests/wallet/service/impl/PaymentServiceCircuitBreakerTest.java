@@ -2,6 +2,7 @@ package com.playtomic.tests.wallet.service.impl;
 
 import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
+import com.playtomic.tests.wallet.model.exceptions.InvalidTransactionStatusException;
 import com.playtomic.tests.wallet.model.exceptions.StripeServiceException;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
@@ -9,7 +10,7 @@ import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.model.responses.stripe.StripePaymentResponse;
 import com.playtomic.tests.wallet.service.TransactionService;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
-import com.playtomic.tests.wallet.service.gateways.IPaymentsService;
+import com.playtomic.tests.wallet.service.gateways.IPaymentGatewayService;
 import com.playtomic.tests.wallet.service.registry.PaymentGatewayRegistry;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -39,7 +40,7 @@ public class PaymentServiceCircuitBreakerTest {
     private PaymentGatewayRegistry gatewayRegistry;
 
     @Mock
-    private IPaymentsService paymentGateway;
+    private IPaymentGatewayService paymentGateway;
 
     @Mock
     private CircuitBreaker circuitBreaker;
@@ -69,7 +70,7 @@ public class PaymentServiceCircuitBreakerTest {
                     return supplier.get();
                 });
 
-        gatewayConnection = new GatewayConnection(paymentGateway, circuitBreaker, null);
+        gatewayConnection = new GatewayConnection(paymentGateway, circuitBreaker);
         when(gatewayRegistry.getProviderConnection(eq(PaymentGateway.STRIPE))).thenReturn(gatewayConnection);
 
         paymentService = new PaymentService(gatewayRegistry, transactionService);
@@ -83,7 +84,7 @@ public class PaymentServiceCircuitBreakerTest {
     }
 
     @Test
-    public void testPaymentSuccessWithCircuitBreaker() throws ExecutionException, InterruptedException, TransactionNotFoundException {
+    public void testPaymentSuccessWithCircuitBreaker() throws ExecutionException, InterruptedException, TransactionNotFoundException, InvalidTransactionStatusException {
         long transactionId = 123L;
         StripePaymentResponse mockResponse = new StripePaymentResponse("payment_123", BigDecimal.valueOf(50.0));
 
@@ -112,7 +113,7 @@ public class PaymentServiceCircuitBreakerTest {
         assertInstanceOf(StripeServiceException.class, exception.getCause());
         try {
             verify(transactionService).updateTransactionPaymentStatus(eq(123L), eq(PaymentStatus.FAILED));
-        } catch (TransactionNotFoundException e) {
+        } catch (TransactionNotFoundException | InvalidTransactionStatusException e) {
             fail("Transaction service should be called with fallback status");
         }
     }
@@ -150,13 +151,13 @@ public class PaymentServiceCircuitBreakerTest {
             GatewayConnection conn = gatewayRegistry.getProviderConnection(PaymentGateway.STRIPE);
 
             return conn.getCircuitBreaker().executeCompletionStage(
-                            () -> conn.getPaymentGateway().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount())
+                            () -> conn.getPaymentGatewayService().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount())
                     ).toCompletableFuture()
                     .thenApply(response -> {
                         try {
                             transactionService.updateTransactionPaymentStatus(transactionId, PaymentStatus.SUCCESSFUL);
                             return response;
-                        } catch (TransactionNotFoundException e) {
+                        } catch (TransactionNotFoundException | InvalidTransactionStatusException e) {
                             throw new CompletionException("Transaction update failed", e);
                         }
                     })
@@ -165,7 +166,7 @@ public class PaymentServiceCircuitBreakerTest {
 
                         try {
                             transactionService.updateTransactionPaymentStatus(transactionId, PaymentStatus.FAILED);
-                        } catch (TransactionNotFoundException ignored) {
+                        } catch (TransactionNotFoundException | InvalidTransactionStatusException ignored) {
                         }
 
                         throw new CompletionException("Payment processing failed", cause);

@@ -4,6 +4,7 @@ import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import com.playtomic.tests.wallet.model.dto.Transaction;
 import com.playtomic.tests.wallet.model.dto.Wallet;
+import com.playtomic.tests.wallet.model.exceptions.InvalidTransactionStatusException;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
@@ -11,71 +12,66 @@ import com.playtomic.tests.wallet.repository.TransactionRepository;
 import com.playtomic.tests.wallet.utils.IdempotencyUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Date;
 
 @Service
 @RequiredArgsConstructor
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
+    private final TransactionStateMachineService transactionStateMachine;
 
-
-    @Transactional(isolation = Isolation.SERIALIZABLE,
-            propagation = Propagation.REQUIRES_NEW)
-    public Transaction createInitialTransaction(Wallet wallet, PaymentRequest paymentRequest) {
-
-        // This method can be reworked to create the transaction for different purposes
-        // like expending the money/transfer between wallets
+    @Transactional
+    public Transaction createInitialTransaction(Wallet wallet, PaymentRequest paymentRequest) throws InvalidTransactionStatusException {
         Transaction transaction = new Transaction();
         transaction.setWallet(wallet);
         transaction.setAmount(paymentRequest.getAmount());
         transaction.setPaymentMethod(paymentRequest.getPaymentMethod());
-        transaction.setPaymentStatus(PaymentStatus.CREATED);
         transaction.setPaymentType(paymentRequest.getPaymentType());
         transaction.setIdempotencyKey(IdempotencyUtils.generateIdempotenceKey(paymentRequest));
 
-        // Payment provider will be set by the paymentProcessor after getting the suitable provider
-
-        return transactionRepository.save(transaction);
-
+        // Initial status set through state machine
+        return transactionStateMachine.transition(transaction, PaymentStatus.CREATED);
     }
 
-    @Transactional(isolation = Isolation.REPEATABLE_READ,
-            propagation = Propagation.REQUIRES_NEW)
-    public void setProviderForTransaction(long transactionId, String credit_card, PaymentGateway gateway, IPaymentResponse response) throws TransactionNotFoundException {
-        var transaction = findTransactionById(transactionId);
+    @Transactional
+    public void processPaymentGatewayResponse(long transactionId, String maskedCard,
+                                              PaymentGateway gateway, IPaymentResponse response)
+            throws TransactionNotFoundException {
+
+        Transaction transaction = findTransactionById(transactionId);
+        updateTransactionGatewayDetails(transaction, maskedCard, gateway, response);
+        transitionToSubmittedStatus(transaction);
+    }
+
+    private void updateTransactionGatewayDetails(Transaction transaction, String maskedCard,
+                                                 PaymentGateway gateway, IPaymentResponse response) {
         transaction.setPaymentGateway(gateway);
-        transaction.setPaymentStatus(PaymentStatus.SUBMITTED);
         transaction.setPaymentGatewayTransactionId(response.getGatewayTransactionID());
-        transaction.setMaskedCard(credit_card);
-        transactionRepository.save(transaction);
+        transaction.setMaskedCard(maskedCard);
     }
 
-    @Transactional(isolation = Isolation.REPEATABLE_READ,
-            propagation = Propagation.REQUIRES_NEW)
-    public void updateTransactionPaymentStatus(long transactionId, PaymentStatus status) throws TransactionNotFoundException {
-        //
-        var transaction = findTransactionById(transactionId);
-        transaction.setPaymentStatus(status);
-        transactionRepository.save(transaction);
+    private void transitionToSubmittedStatus(Transaction transaction) {
+        try {
+            transactionStateMachine.transition(transaction, PaymentStatus.SUBMITTED);
+        } catch (InvalidTransactionStatusException e) {
+            // Handle or rethrow as business exception
+            throw new IllegalStateException("Failed to submit transaction", e);
+        }
+    }
+
+
+    @Transactional
+    public void finalizeTransaction(Transaction transaction) throws InvalidTransactionStatusException {
+        transactionStateMachine.transition(transaction, PaymentStatus.FINALIZED);
     }
 
     public Transaction findTransactionById(Long transactionId) throws TransactionNotFoundException {
-        return transactionRepository.findById(transactionId).orElseThrow(
-                () -> new TransactionNotFoundException(transactionId));
+        return transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new TransactionNotFoundException(transactionId));
     }
 
-    @Transactional(isolation = Isolation.SERIALIZABLE,
-            propagation = Propagation.REQUIRES_NEW)
-    public void finalizeTransaction(Transaction transaction) {
-        transaction.setFinishedAt(new Date());
-        transaction.setPaymentStatus(PaymentStatus.FINALIZED);
-        transactionRepository.save(transaction);
+    public void updateTransactionPaymentStatus(long transactionId, PaymentStatus paymentStatus) throws InvalidTransactionStatusException, TransactionNotFoundException {
+        var transaction = transactionStateMachine.transition(transactionId, paymentStatus);
     }
-
-
 }

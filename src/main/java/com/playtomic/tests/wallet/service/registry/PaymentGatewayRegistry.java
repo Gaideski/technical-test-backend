@@ -3,7 +3,7 @@ package com.playtomic.tests.wallet.service.registry;
 import com.playtomic.tests.wallet.model.annotation.PaymentService;
 import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
-import com.playtomic.tests.wallet.service.gateways.IPaymentsService;
+import com.playtomic.tests.wallet.service.gateways.IPaymentGatewayService;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.aop.support.AopUtils;
@@ -26,8 +26,8 @@ public class PaymentGatewayRegistry {
         this.paymentsProviderMap = new EnumMap<>(PaymentGateway.class);
 
 
-        Map<String, IPaymentsService> paymentServices =
-                applicationContext.getBeansOfType(IPaymentsService.class);
+        Map<String, IPaymentGatewayService> paymentServices =
+                applicationContext.getBeansOfType(IPaymentGatewayService.class);
 
         paymentServices.forEach((beanName, service) -> {
             Class<?> targetClass = AopUtils.isAopProxy(service) ?
@@ -41,7 +41,7 @@ public class PaymentGatewayRegistry {
                         annotation.value().name() + "-circuit-breaker");
 
                 paymentsProviderMap.put(annotation.value(),
-                        new GatewayConnection(service, circuitBreaker, null));
+                        new GatewayConnection(annotation.value(), service, circuitBreaker));
             }
         });
     }

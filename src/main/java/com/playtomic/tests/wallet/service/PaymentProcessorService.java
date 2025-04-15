@@ -2,8 +2,10 @@ package com.playtomic.tests.wallet.service;
 
 import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
+import com.playtomic.tests.wallet.model.exceptions.InvalidTransactionStatusException;
+import com.playtomic.tests.wallet.model.exceptions.StripeAmountTooSmallException;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
-import com.playtomic.tests.wallet.model.requests.PaymentRequest;
+import com.playtomic.tests.wallet.model.requests.IPaymentRequest;
 import com.playtomic.tests.wallet.model.responses.DefaultPaymentResponse;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
@@ -26,43 +28,47 @@ public class PaymentProcessorService {
     private final TransactionService transactionService;
 
 
-    public CompletableFuture<IPaymentResponse> requestPaymentForGateway(PaymentRequest paymentRequest, long transactionId) {
+    public CompletableFuture<IPaymentResponse> requestPaymentForGateway(IPaymentRequest paymentRequest, long transactionId) {
 
         GatewayConnection conn = selectBestProvider();
 
         // Use circuit breaker here on gateway call
-        CircuitBreaker circuitBreaker =
-                (CircuitBreaker) conn.getCircuitBreaker();
+        CircuitBreaker circuitBreaker = conn.getCircuitBreaker();
 
         return circuitBreaker.executeCompletionStage(
-                () -> conn.getPaymentGateway().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount())
+                () -> conn.getPaymentGatewayService().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount())
         ).toCompletableFuture().exceptionally(throwable -> {
             logger.error("Circuit breaker triggered fallback for transaction {}: {}", transactionId, throwable.getMessage());
-
+            var response = new DefaultPaymentResponse();
             try {
-                transactionService.updateTransactionPaymentStatus(transactionId, PaymentStatus.FAILED);
-            } catch (TransactionNotFoundException e) {
-                logger.warn("Transaction not found during fallback", e);
+                var newStatus = PaymentStatus.FAILED;
+                if (throwable.getCause() instanceof StripeAmountTooSmallException) {
+                    // Should set status but not open the Cb
+                    newStatus = PaymentStatus.CANCELED;
+                }
+                processGatewayResponse(transactionId, paymentRequest, response, conn.getPaymentGateway());
+                transactionService.updateTransactionPaymentStatus(transactionId, newStatus);
+
+            } catch (InvalidTransactionStatusException | TransactionNotFoundException e) {
+                throw new RuntimeException(e);
             }
+            return response;
 
-
-            return (IPaymentResponse) new DefaultPaymentResponse();
         }).thenApply(response -> {
             try {
-                transactionService.setProviderForTransaction(transactionId,
-                        CardUtils.maskCardNumber(paymentRequest.getCardNumber()),
-                        PaymentGateway.STRIPE, response);
+                processGatewayResponse(transactionId, paymentRequest, response, conn.getPaymentGateway());
 
                 transactionService.updateTransactionPaymentStatus(transactionId,
                         PaymentStatus.PROCESSING);
 
                 if (response.getGatewayTransactionAmount() != null &&
                         response.getGatewayTransactionAmount().compareTo(paymentRequest.getAmount()) == 0) {
+
                     transactionService.updateTransactionPaymentStatus(transactionId,
                             PaymentStatus.SUCCESSFUL);
                 }
 
-            } catch (TransactionNotFoundException e) {
+            } catch (TransactionNotFoundException | InvalidTransactionStatusException e) {
                 logger.warn("Transaction not found", e);
                 throw new RuntimeException(e);
             }
@@ -71,6 +77,15 @@ public class PaymentProcessorService {
         });
 
 
+    }
+
+    private void processGatewayResponse(long transactionId,
+                                        IPaymentRequest paymentRequest,
+                                        IPaymentResponse response,
+                                        PaymentGateway paymentGateway) throws TransactionNotFoundException {
+        transactionService.processPaymentGatewayResponse(transactionId,
+                CardUtils.maskCardNumber(paymentRequest.getCardNumber()),
+                paymentGateway, response);
     }
 
     private GatewayConnection selectBestProvider() {

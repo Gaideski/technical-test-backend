@@ -19,7 +19,7 @@ public class PaymentsGatewayServiceFactory {
         this.restTemplateBuilder = restTemplateBuilder;
     }
 
-    public IPaymentsService createPaymentsService(PaymentGateway provider) {
+    public IPaymentGatewayService createPaymentsService(PaymentGateway provider) {
         switch (provider) {
             case STRIPE:
                 return createStripeService();
@@ -30,7 +30,7 @@ public class PaymentsGatewayServiceFactory {
 
     }
 
-    private IPaymentsService createStripeService() {
+    private IPaymentGatewayService createStripeService() {
         return new StripeService(
                 stripeConfig.getChargesUri(),
                 stripeConfig.getRefundsUri(),

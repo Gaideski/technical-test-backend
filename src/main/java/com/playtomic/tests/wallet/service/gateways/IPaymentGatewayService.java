@@ -6,7 +6,7 @@ import lombok.NonNull;
 import java.math.BigDecimal;
 import java.util.concurrent.CompletableFuture;
 
-public interface IPaymentsService {
+public interface IPaymentGatewayService {
 
     CompletableFuture<IPaymentResponse> charge(@NonNull String creditCardNumber, @NonNull BigDecimal amount);
 

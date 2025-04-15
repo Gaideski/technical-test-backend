@@ -5,7 +5,7 @@ import com.playtomic.tests.wallet.model.exceptions.StripeServiceException;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.model.responses.stripe.StripePaymentResponse;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
-import com.playtomic.tests.wallet.service.gateways.IPaymentsService;
+import com.playtomic.tests.wallet.service.gateways.IPaymentGatewayService;
 import com.playtomic.tests.wallet.service.gateways.stripe.StripeService;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -53,9 +53,9 @@ public class PaymentGatewayRegistryTest {
 
         circuitBreakerRegistry = CircuitBreakerRegistry.of(circuitBreakerConfig);
 
-        Map<String, IPaymentsService> paymentServicesMap = new HashMap<>();
+        Map<String, IPaymentGatewayService> paymentServicesMap = new HashMap<>();
         paymentServicesMap.put("stripeService", stripeService);
-        when(applicationContext.getBeansOfType(IPaymentsService.class)).thenReturn(paymentServicesMap);
+        when(applicationContext.getBeansOfType(IPaymentGatewayService.class)).thenReturn(paymentServicesMap);
 
 
         paymentGatewayRegistry = new PaymentGatewayRegistry(applicationContext, circuitBreakerRegistry);
@@ -68,7 +68,7 @@ public class PaymentGatewayRegistryTest {
         assertNotNull(connection);
         assertNotNull(connection.getCircuitBreaker());
         assertEquals(CircuitBreaker.State.CLOSED, connection.getCircuitBreaker().getState());
-        assertSame(stripeService, connection.getPaymentGateway());
+        assertSame(stripeService, connection.getPaymentGatewayService());
     }
 
     @Test

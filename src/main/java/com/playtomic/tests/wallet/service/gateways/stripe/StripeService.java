@@ -6,7 +6,7 @@ import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.exceptions.StripeServiceException;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.model.responses.stripe.StripePaymentResponse;
-import com.playtomic.tests.wallet.service.gateways.IPaymentsService;
+import com.playtomic.tests.wallet.service.gateways.IPaymentGatewayService;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -32,7 +32,7 @@ import java.util.concurrent.CompletionException;
  */
 @PaymentService(PaymentGateway.STRIPE)
 @Service
-public class StripeService implements IPaymentsService {
+public class StripeService implements IPaymentGatewayService {
 
     @NonNull
     private final URI chargesUri;
