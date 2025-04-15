@@ -21,4 +21,14 @@ public class TransactionDto {
     private PaymentGateway paymentGateway;
     private Date createdAt;
     private Date finishedAt;
+
+    public TransactionDto(Transaction transaction) {
+        this.transactionId=transaction.getTransactionId();
+        this.amount= transaction.getAmount();
+        this.status= transaction.getPaymentStatus();
+        this.paymentMethod=transaction.getPaymentMethod();
+        this.paymentGateway=transaction.getPaymentGateway();
+        this.createdAt= transaction.getCreatedAt();
+        this.finishedAt=transaction.getFinishedAt();
+    }
 }

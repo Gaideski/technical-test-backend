@@ -70,7 +70,7 @@ public class PaymentServiceCircuitBreakerTest {
                     return supplier.get();
                 });
 
-        gatewayConnection = new GatewayConnection(paymentGateway, circuitBreaker);
+        gatewayConnection = new GatewayConnection(PaymentGateway.STRIPE,paymentGateway, circuitBreaker);
         when(gatewayRegistry.getProviderConnection(eq(PaymentGateway.STRIPE))).thenReturn(gatewayConnection);
 
         paymentService = new PaymentService(gatewayRegistry, transactionService);

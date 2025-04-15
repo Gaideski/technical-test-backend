@@ -1,6 +1,7 @@
 package com.playtomic.tests.wallet.api;
 
 import com.playtomic.tests.wallet.model.exceptions.InvalidTransactionStatusException;
+import com.playtomic.tests.wallet.model.exceptions.TransactionIdempotencyViolation;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
 import com.playtomic.tests.wallet.service.WalletService;
@@ -27,17 +28,11 @@ public class WalletController {
 
 
     @PostMapping("/recharge")
-    public ResponseEntity<?> depositFunds(@Valid @RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException {
-        walletService.depositFundsToAccount(paymentRequest);
-        return ResponseEntity.ok(HttpStatus.ACCEPTED);
+    public ResponseEntity<?> recharge(@Valid @RequestBody PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException, TransactionIdempotencyViolation {
+        var transaction = walletService.rechargeWallet(paymentRequest);
+        return ResponseEntity.accepted().body(transaction);
     }
 
-    @ExceptionHandler(WalletNotFoundException.class)
-    public ResponseEntity<Object> handleWalletNotFoundException(WalletNotFoundException ex) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("message", ex.getMessage());
-        return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
-    }
 
     @GetMapping("/")
     public ResponseEntity<?> getWallet(@RequestHeader("account_id") String accountId,
@@ -47,5 +42,23 @@ public class WalletController {
             return ResponseEntity.ok(wallet);
         }
         return ResponseEntity.internalServerError().build();
+    }
+
+    @ExceptionHandler(WalletNotFoundException.class)
+    public ResponseEntity<Object> handleWalletNotFoundException(WalletNotFoundException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", ex.getMessage());
+
+        return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(TransactionIdempotencyViolation.class)
+    public ResponseEntity<Object> handleTransactionIdempotencyViolationException(TransactionIdempotencyViolation ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", ex.getMessage());
+        body.put("existing_transaction", ex.getExistingTransaction());
+        body.put("request", ex.getPaymentAttempt());
+
+        return new ResponseEntity<>(body, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 }

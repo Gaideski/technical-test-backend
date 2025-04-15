@@ -2,10 +2,12 @@ package com.playtomic.tests.wallet.service;
 
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import com.playtomic.tests.wallet.model.dto.Transaction;
+import com.playtomic.tests.wallet.model.dto.TransactionDto;
 import com.playtomic.tests.wallet.model.dto.Wallet;
 import com.playtomic.tests.wallet.model.dto.WalletDto;
 import com.playtomic.tests.wallet.model.eventpublisher.TransactionStatusChangedEvent;
 import com.playtomic.tests.wallet.model.exceptions.InvalidTransactionStatusException;
+import com.playtomic.tests.wallet.model.exceptions.TransactionIdempotencyViolation;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
@@ -29,8 +31,6 @@ public class WalletService {
     private final PaymentProcessorService paymentProcessorService;
     private final TransactionService transactionService;
     private final Logger logger = LoggerFactory.getLogger(WalletService.class);
-
-    //TODO: create validations:
 
 
     public WalletDto getOrCreateWalletByAccountId(String accountId, String sessionId) throws WalletNotFoundException {
@@ -56,25 +56,26 @@ public class WalletService {
         return new WalletDto(wallet);
     }
 
-    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException {
+    public TransactionDto rechargeWallet(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException, TransactionIdempotencyViolation {
         // sync submission to database
         var transaction = initiateTransaction(paymentRequest);
-
         // Async flow
         paymentProcessorService.requestPaymentForGateway(paymentRequest, transaction.getTransactionId());
+        return new TransactionDto(transaction);
     }
 
-    private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException {
+    @Transactional
+    private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException, TransactionIdempotencyViolation {
         var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
                 .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
 
+        transactionService.certifyIdempotency(paymentRequest);
         return transactionService.createInitialTransaction(wallet, paymentRequest);
     }
 
     // Listening to all events here, Ideally different events will go to different listeners.
     // In memory version of queue/async processing.
     @EventListener
-    @Transactional
     public void handleTransactionStatusChange(TransactionStatusChangedEvent event) throws WalletNotFoundException, TransactionNotFoundException {
         if (event.getNewStatus() == PaymentStatus.SUCCESSFUL) {
             verifyTransactionAndUpdateFunds(event.getWalletId(), event.getTransactionId());
@@ -91,7 +92,9 @@ public class WalletService {
                 // Get the latest transaction state
                 var transaction = transactionService.findTransactionById(transactionId);
 
-                if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL)) {
+                if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL) &&
+                         transaction.getPaymentGatewayTransactionId()!=null &&
+                         !transaction.getPaymentGatewayTransactionId().isEmpty()) {
                     // Get the latest wallet state
                     Wallet currentWallet = walletRepository.findById(walletId)
                             .orElseThrow(() -> new WalletNotFoundException("Wallet not found"));

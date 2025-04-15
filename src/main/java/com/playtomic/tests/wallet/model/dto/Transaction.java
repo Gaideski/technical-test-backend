@@ -25,7 +25,7 @@ public class Transaction {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long transactionId;
 
-    @Column(unique = true)
+    @Column(unique = true, nullable = false)
     private String idempotencyKey;
 
     @Column(unique = true)

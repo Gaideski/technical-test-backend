@@ -6,7 +6,7 @@ public class DefaultPaymentResponse implements IPaymentResponse {
 
     @Override
     public String getGatewayTransactionID() {
-        return "";
+        return null;
     }
 
     @Override

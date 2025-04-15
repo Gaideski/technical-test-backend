@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.playtomic.tests.wallet.model.constants.PaymentMethod;
 import com.playtomic.tests.wallet.model.constants.PaymentType;
+import com.playtomic.tests.wallet.utils.IdempotencyUtils;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.NonNull;
@@ -16,7 +17,7 @@ import java.math.BigDecimal;
 public class PaymentRequest implements IPaymentRequest {
 
     // HARDCODED FOR POC
-    private final @NonNull PaymentMethod paymentMethod = PaymentMethod.CARD;
+    private final PaymentMethod paymentMethod = PaymentMethod.CARD;
     private final PaymentType paymentType = PaymentType.TOP_UP;
 
 
@@ -37,6 +38,8 @@ public class PaymentRequest implements IPaymentRequest {
     @Size(min = 10, max = 100, message = "Session ID must be between 10-100 characters")
     private final String sessionId;
 
+    // This is better to be set off on client side generating here for easy of use
+    private final String idempotencyKey;
 
     @JsonCreator
     public PaymentRequest(@JsonProperty(value = "account_id", required = true) String id,
@@ -47,6 +50,7 @@ public class PaymentRequest implements IPaymentRequest {
         this.cardNumber = card;
         this.amount = amount;
         this.sessionId = sessionId;
+        this.idempotencyKey= IdempotencyUtils.generateIdempotenceKey(this);
     }
 
 }
