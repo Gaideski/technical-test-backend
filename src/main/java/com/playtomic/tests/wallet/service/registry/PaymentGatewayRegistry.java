@@ -4,39 +4,48 @@ import com.playtomic.tests.wallet.model.annotation.PaymentService;
 import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
 import com.playtomic.tests.wallet.service.gateways.IPaymentsService;
+
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
 
 @Service
 public class PaymentGatewayRegistry {
     private final Map<PaymentGateway, GatewayConnection> paymentsProviderMap;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     @Autowired
-    public PaymentGatewayRegistry(ApplicationContext applicationContext) {
+    public PaymentGatewayRegistry(ApplicationContext applicationContext, CircuitBreakerRegistry circuitBreakerRegistry) {
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
         this.paymentsProviderMap = new EnumMap<>(PaymentGateway.class);
 
-        // Get all beans that implement IPaymentsService
+
         Map<String, IPaymentsService> paymentServices =
                 applicationContext.getBeansOfType(IPaymentsService.class);
 
         paymentServices.forEach((beanName, service) -> {
-            // Get the target class (handling Spring proxies)
             Class<?> targetClass = AopUtils.isAopProxy(service) ?
                     AopUtils.getTargetClass(service) : service.getClass();
 
-            // Use AnnotationUtils to find annotation even in proxied classes
             PaymentService annotation = AnnotationUtils.findAnnotation(
                     targetClass, PaymentService.class);
 
             if (annotation != null) {
+                // Create a named circuit breaker for this payment service
+                CircuitBreaker circuitBreaker = this.circuitBreakerRegistry.circuitBreaker(
+                        annotation.value().name() + "-circuit-breaker");
+
                 paymentsProviderMap.put(annotation.value(),
-                        new GatewayConnection(service, null, null));
+                        new GatewayConnection(service, circuitBreaker, null));
             }
         });
     }

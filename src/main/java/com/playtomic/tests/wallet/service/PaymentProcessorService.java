@@ -4,10 +4,12 @@ import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
+import com.playtomic.tests.wallet.model.responses.DefaultPaymentResponse;
 import com.playtomic.tests.wallet.model.responses.IPaymentResponse;
 import com.playtomic.tests.wallet.service.gateways.GatewayConnection;
 import com.playtomic.tests.wallet.service.registry.PaymentGatewayRegistry;
 import com.playtomic.tests.wallet.utils.CardUtils;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 @Service
 @AllArgsConstructor
@@ -28,8 +32,28 @@ public class PaymentProcessorService {
     public CompletableFuture<IPaymentResponse> requestPaymentForGateway(PaymentRequest paymentRequest, long transactionId) {
 
         GatewayConnection conn = selectBestProvider();
-        // todo: Use circuit breaker here on gateway call
-        return conn.getPaymentGateway().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount()).thenApply(response -> {
+
+        // Use circuit breaker here on gateway call
+        CircuitBreaker circuitBreaker =
+                (CircuitBreaker) conn.getCircuitBreaker();
+
+        return circuitBreaker.executeCompletionStage(
+                () -> conn.getPaymentGateway().charge(paymentRequest.getCardNumber(), paymentRequest.getAmount())
+        ).toCompletableFuture().exceptionally(throwable -> {
+            logger.error("Circuit breaker triggered fallback for transaction {}: {}", transactionId, throwable.getMessage());
+
+            try {
+                transactionService.updateTransactionPaymentStatus(transactionId, PaymentStatus.FAILED);
+            } catch (TransactionNotFoundException e) {
+                logger.warn("Transaction not found during fallback", e);
+            }
+
+            // Create and return a failed payment response
+            IPaymentResponse failedResponse = new DefaultPaymentResponse(); // Replace with your actual implementation
+            // Set appropriate failure details on the response
+
+            return failedResponse;
+        }).thenApply(response -> {
             try {
                 transactionService.setProviderForTransaction(transactionId,
                         CardUtils.maskCardNumber(paymentRequest.getCardNumber()),
@@ -40,12 +64,12 @@ public class PaymentProcessorService {
 
                 if (response.getGatewayTransactionAmount() != null &&
                         response.getGatewayTransactionAmount().compareTo(paymentRequest.getAmount()) == 0) {
-                    logger.info("Updating transaction {} to SUCCESSFUL", transactionId);
                     transactionService.updateTransactionPaymentStatus(transactionId,
                             PaymentStatus.SUCCESSFUL);
                 }
 
             } catch (TransactionNotFoundException e) {
+                logger.warn("Transaction not found", e);
                 throw new RuntimeException(e);
             }
 

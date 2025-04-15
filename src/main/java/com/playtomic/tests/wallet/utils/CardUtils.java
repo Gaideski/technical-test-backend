@@ -3,10 +3,20 @@ package com.playtomic.tests.wallet.utils;
 public class CardUtils {
 
     public static String maskCardNumber(String cardNumber) {
+        if (cardNumber == null) {
+            return "";
+        }
         // Keep only the last 4 digits of card number
+
+
+        if (!cardNumber.matches("\\A\\p{ASCII}*\\z")) {
+            throw new IllegalArgumentException("Card number contains non-ASCII characters");
+        }
+
         return cardNumber.length() <= 4
                 ? cardNumber
                 : "*".repeat(cardNumber.length() - 4) + cardNumber.substring(cardNumber.length() - 4);
+
     }
 
     public static String bytesToHex(byte[] bytes) {

@@ -1,11 +1,12 @@
 package com.playtomic.tests.wallet.service;
 
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
+import com.playtomic.tests.wallet.model.dto.Transaction;
 import com.playtomic.tests.wallet.model.dto.Wallet;
 import com.playtomic.tests.wallet.model.exceptions.TransactionNotFoundException;
 import com.playtomic.tests.wallet.model.exceptions.WalletNotFoundException;
 import com.playtomic.tests.wallet.model.requests.PaymentRequest;
-import com.playtomic.tests.wallet.model.responses.WalletDto;
+import com.playtomic.tests.wallet.model.dto.WalletDto;
 import com.playtomic.tests.wallet.repository.WalletRepository;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
@@ -49,24 +50,19 @@ public class WalletService {
     }
 
     private WalletDto formatWalletForResponse(Wallet wallet) {
-        return new WalletDto(wallet.getAccountId(),
-                wallet.getFunds(),
-                wallet.getTransactions());
+        return new WalletDto(wallet);
     }
 
-    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionNotFoundException {
+    public void depositFundsToAccount(PaymentRequest paymentRequest) throws WalletNotFoundException {
         // sync submission to database
-        var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
-                .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
-
-        var transaction = transactionService.createInitialTransaction(wallet, paymentRequest);
+        var transaction = initiateTransaction(paymentRequest);
 
         // Async flow
         paymentProcessorService.requestPaymentForGateway(paymentRequest, transaction.getTransactionId())
                 .thenApply(
                         response -> {
                             try {
-                                verifyTransactionAndUpdateFunds(wallet.getWalletId(), transaction.getTransactionId());
+                                verifyTransactionAndUpdateFunds(transaction.getWallet().getWalletId(), transaction.getTransactionId());
                             } catch (TransactionNotFoundException | WalletNotFoundException e) {
                                 throw new RuntimeException(e);
                             }
@@ -75,6 +71,12 @@ public class WalletService {
                 );
     }
 
+    private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException {
+        var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
+                .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
+
+        return transactionService.createInitialTransaction(wallet, paymentRequest);
+    }
 
     @Transactional
     private void verifyTransactionAndUpdateFunds(Long walletId, Long transactionId) throws TransactionNotFoundException, WalletNotFoundException {

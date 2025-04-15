@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.playtomic.tests.wallet.model.constants.PaymentGateway;
 import com.playtomic.tests.wallet.model.constants.PaymentMethod;
 import com.playtomic.tests.wallet.model.constants.PaymentStatus;
+import com.playtomic.tests.wallet.model.constants.PaymentType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -37,6 +38,9 @@ public class Transaction {
     @Column(nullable = false)
     private BigDecimal amount;
 
+    @Column(nullable = false)
+    private int paymentFailedCounter;
+
     @Column
     private String maskedCard;
 
@@ -46,6 +50,11 @@ public class Transaction {
 
     @Enumerated(EnumType.STRING)
     private PaymentGateway paymentGateway;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PaymentType paymentType;
+
 
     @Column(nullable = false)
     private Date createdAt;

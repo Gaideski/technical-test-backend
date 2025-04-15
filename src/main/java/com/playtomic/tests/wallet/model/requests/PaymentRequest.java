@@ -3,6 +3,7 @@ package com.playtomic.tests.wallet.model.requests;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.playtomic.tests.wallet.model.constants.PaymentMethod;
+import com.playtomic.tests.wallet.model.constants.PaymentType;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.NonNull;
@@ -14,6 +15,8 @@ public class PaymentRequest {
 
     // HARDCODED FOR POC
     private final @NonNull PaymentMethod paymentMethod = PaymentMethod.CARD;
+    private final PaymentType paymentType = PaymentType.TOP_UP;
+
 
     @NotBlank(message = "Account ID cannot be blank")
     @Size(min = 5, max = 50, message = "Account ID must be between 5-50 characters")

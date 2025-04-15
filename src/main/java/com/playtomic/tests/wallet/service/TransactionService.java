@@ -24,14 +24,19 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
 
 
+    @Transactional(isolation = Isolation.SERIALIZABLE,
+            propagation = Propagation.REQUIRES_NEW)
     public Transaction createInitialTransaction(Wallet wallet, PaymentRequest paymentRequest) {
 
+        // This method can be reworked to create the transaction for different purposes
+        // like expending the money/transfer between wallets
         Transaction transaction = new Transaction();
         transaction.setWallet(wallet);
         transaction.setAmount(paymentRequest.getAmount());
         transaction.setPaymentMethod(paymentRequest.getPaymentMethod());
         transaction.setPaymentStatus(PaymentStatus.CREATED);
-        transaction.setIdempotencyKey(IdempotencyUtils.generateIdempotenceKey(paymentRequest)); // Using sessionId as idempotency key
+        transaction.setPaymentType(paymentRequest.getPaymentType());
+        transaction.setIdempotencyKey(IdempotencyUtils.generateIdempotenceKey(paymentRequest));
 
         // Payment provider will be set by the paymentProcessor after getting the suitable provider
 
@@ -39,7 +44,7 @@ public class TransactionService {
 
     }
 
-    @Transactional(isolation = Isolation.SERIALIZABLE,
+    @Transactional(isolation = Isolation.REPEATABLE_READ,
             propagation = Propagation.REQUIRES_NEW)
     public void setProviderForTransaction(long transactionId, String credit_card, PaymentGateway gateway, IPaymentResponse response) throws TransactionNotFoundException {
         var transaction = findTransactionById(transactionId);
@@ -50,16 +55,13 @@ public class TransactionService {
         transactionRepository.save(transaction);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(isolation = Isolation.REPEATABLE_READ,
+            propagation = Propagation.REQUIRES_NEW)
     public void updateTransactionPaymentStatus(long transactionId, PaymentStatus status) throws TransactionNotFoundException {
-        // best approach since it can be flushed to the db when more updates happen
-        // transactionRepository.updatePaymentStatus(transactionId, status);
-
-        // Emulate latency and async requests
+        //
         var transaction = findTransactionById(transactionId);
         transaction.setPaymentStatus(status);
         transactionRepository.save(transaction);
-
     }
 
     public Transaction findTransactionById(Long transactionId) throws TransactionNotFoundException {
@@ -67,20 +69,14 @@ public class TransactionService {
                 () -> new TransactionNotFoundException(transactionId));
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(isolation = Isolation.SERIALIZABLE,
+                    propagation = Propagation.REQUIRES_NEW)
     public void finalizeTransaction(Transaction transaction) {
         transaction.setFinishedAt(new Date());
         transaction.setPaymentStatus(PaymentStatus.FINALIZED);
         transactionRepository.save(transaction);
     }
 
-    // TODO: create cron task that polls the database for status and take action
-    // Created -> submit payment
-    // Submitted -> Expire (we don't have a way to validate the status if crashed)
-    // Successful or Processing -> Update wallet (using both as same for POC purposes)
 
-
-    // TODO: create cron task that polls the database for ttl and take action
-    // delete older transactions
 
 }
