@@ -40,6 +40,7 @@ public class PaymentGatewayRegistryTest {
     private StripeService stripeService;
 
     private CircuitBreakerRegistry circuitBreakerRegistry;
+
     private PaymentGatewayRegistry paymentGatewayRegistry;
 
     @BeforeEach

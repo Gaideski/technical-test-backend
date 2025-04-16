@@ -15,6 +15,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.Duration;
+import java.util.concurrent.CompletionException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -37,6 +39,7 @@ public class StripeServiceTest {
     @BeforeEach
     public void buildMocks() {
         when(mockBuilder.errorHandler(any())).thenReturn(mockBuilder);
+        when(mockBuilder.setConnectTimeout(any(Duration.class))).thenReturn(mockBuilder);
         when(mockBuilder.build()).thenReturn(mockRestTemplate);
 
         stripeService = new StripeService(testChargesUri, testRefundsUri, mockBuilder);
@@ -50,9 +53,13 @@ public class StripeServiceTest {
                 eq(StripePaymentResponse.class)))
                 .thenThrow(new StripeAmountTooSmallException());
 
-        Assertions.assertThrows(StripeAmountTooSmallException.class, () -> {
-            stripeService.charge("4242 4242 4242 4242", new BigDecimal(5));
+        // The method returns CompletableFuture, so we need to handle it differently
+        CompletionException exception = Assertions.assertThrows(CompletionException.class, () -> {
+            stripeService.charge("4242 4242 4242 4242", new BigDecimal(5)).join();
         });
+
+        // Check that the cause of the CompletionException is our expected StripeAmountTooSmallException
+        Assertions.assertTrue(exception.getCause() instanceof StripeAmountTooSmallException);
     }
 
     @Test

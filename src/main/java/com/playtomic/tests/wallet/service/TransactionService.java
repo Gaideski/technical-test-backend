@@ -34,8 +34,7 @@ public class TransactionService {
     @Transactional(isolation = Isolation.SERIALIZABLE,
             propagation = Propagation.REQUIRES_NEW,
             timeout = 5) // 5 second timeout
-    public Transaction createInitialTransaction(Wallet wallet, PaymentRequest paymentRequest)
-            throws InvalidTransactionStatusException {
+    public Transaction createInitialTransaction(Wallet wallet, PaymentRequest paymentRequest) {
         Transaction transaction = new Transaction();
         transaction.setWallet(wallet);
         transaction.setAmount(paymentRequest.getAmount());
@@ -43,8 +42,8 @@ public class TransactionService {
         transaction.setPaymentType(paymentRequest.getPaymentType());
         transaction.setIdempotencyKey(paymentRequest.getIdempotencyKey());
         transaction.setPaymentGatewayTransactionId(null);
-
-        return transactionStateMachine.transition(transaction, PaymentStatus.CREATED);
+        transaction.setPaymentStatus(PaymentStatus.CREATED);
+        return transactionRepository.save(transaction);
     }
 
     // Optimistic locking for updates

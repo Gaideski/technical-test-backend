@@ -1,110 +1,122 @@
-<h2>Goal</h2>
-This exercise consists of building a proof of concept of that wallet service. You have to code endpoints for these
-operations:
+# Wallet Service Proof of Concept
 
-- Get a wallet using its identifier.
-- Top-up money in that wallet using a credit card number. It has to charge that amount internally using a third-party
-  platform.
+## Goal
 
-<h2> Outside the poc</h2>
+Build a wallet service with these core features:
 
-* but we will discuss possible solutions during the interview:
+1. Get wallet details by identifier
+2. Top up money using a credit card via a third-party payment platform
 
-- How to spend money from the wallet.
-- How to refund that money.
+## Out of Scope (Discussion Topics)
 
-<h3>Data structure</h3>
+We'll discuss these potential features during the interview:
 
-> Wallet
-> - walletId<long> (correlates with user id - can be switched to other type) - As we don't hold user creation, any new
-    id's will create a new user within the wallet
-> - createdAt<Date> (timestamp)
-> - Amount<BigDecimal> (current funds)
-> - accountStatus<Enum> (active, pending, etc)
-> - version<long> (maybe used for optimistic locking)
-> - transactionList<Transaction> (list of transactions)
+- Spending money from the wallet
+- Processing refunds
 
-> Transaction
-> - transactionId<long> (unique identifier)
-> - idempotencyKey<String> (unique key to prevent duplicate operations)
-> - wallet<Wallet> (reference to the associated wallet)
-> - amount<BigDecimal> (transaction amount)
-> - paymentMethod<Enum> (payment method used - credit card, etc)
-> - provider<Enum> (payment gateway provider)
-> - createdAt<Date> (when transaction was initiated)
-> - finishedAt<Date> (when transaction was completed)
-> - paymentStatus<Enum> (current status of payment)
-> - ttl<Date> (time-to-live for record retention - default 30 days)
->
-> Transactions are automatically timestamped on creation (`@PrePersist`)
->
->TTL is set to 30 days from creation by default
->
->Status changes should be tracked (though full history is outside current POC scope)
+## Data Structure
 
-< Project Structure>
-Refactor the project structure so that Stripe will be under a PaymentGatewayFactory. This provides modularity
-to handle more providers in the future.
+### Wallet
 
-### Stripe Simulator Testing
+- `walletId` (Long) - Unique identifier (can link to user ID)
+    - New IDs automatically create new wallets (no separate user creation)
+- `createdAt` (Date) - Creation timestamp
+- `amount` (BigDecimal) - Current balance
+- `accountStatus` (Enum) - Active, Pending, etc.
+- `version` (Long) - For optimistic locking
+- `transactionList` - Last 10 transactions (sorted by date)
 
-**Updated Test Summary Table**
+### Transaction
 
-| Test Case              | Simulator Response | Required Handling                 | Validation Location | Notes                  |
-|------------------------|--------------------|-----------------------------------|---------------------|------------------------|
-| **Basic Tests**        |                    |                                   |                     |                        |
-| Malformed JSON         | 400 Bad Request    | Throw StripeServiceException      | N/A                 | Correct handling       |
-| Correct Request        | 200 OK             | Accept                            | N/A                 | No idempotency control |
-| **Amount Validation**  |                    |                                   |                     |                        |
-| Amount <10 EUR         | 422 Unprocessable  | Throw AmountTooSmallException     | Client-side         | Must pre-filter        |
-| Negative Amount        | 422 Unprocessable  | Throw InvalidAmountException      | Client-side         | Must validate          |
-| Extremely Large Amount | Accepted           | Set max amount (e.g., 10,000 EUR) | Client-side         | Fraud prevention       |
-| Decimal Precision      | No limits          | Limit to 2 decimal places         | Client-side         | Currency standards     |
-| **Card Validation**    |                    |                                   |                     |                        |
-| Empty Card             | 200 OK             | Throw InvalidCardException        | Client-side         | Must pre-validate      |
-| Invalid Card Format    | 200 OK             | Throw InvalidCardException        | Client-side         | Must pre-validate      |
-| Luhn-Invalid Card      | Accepted           | Implement Luhn check              | Client-side         | Basic card validation  |
-| Expired Credit Card    | Ignored            | (Optional) Implement validation   | Client-side         | Not required           |
-| **Request Structure**  |                    |                                   |                     |                        |
-| Null Values            | Accepted           | Validate non-null fields          | Client-side         | Required fields        |
-| Missing Fields         | 400 Bad Request    | N/A                               | Simulator           | Correct handling       |
-| **Advanced Cases**     |                    |                                   |                     |                        |
-| Idempotency Key Reuse  | Ignored            | (Optional) Implement              | Client-side         | Not required           |
+- `transactionId` (Long) - Unique ID
+- `idempotencyKey` (String) - Prevents duplicate operations
+- `wallet` - Linked wallet reference
+- `amount` (BigDecimal) - Transaction value
+- `paymentMethod` (Enum) - Credit card, etc.
+- `provider` (Enum) - Payment gateway
+- `createdAt` (Date) - Start timestamp
+- `finishedAt` (Date) - Completion timestamp
+- `paymentStatus` (Enum) - Current state
+- `ttl` (Date) - Auto-delete after 30 days (default)
 
-Development ideas:
+Features:
 
-Transaction status:
-CREATED; SUBMITTED; SUCCESSFUL; FINALIZED; DENIED;
-Control the status transition by some sort of state machine
+- Automatic timestamping on creation (`@PrePersist`)
+- Status changes tracked (full history not implemented)
 
-Payment method? Add for future
+## Project Structure
 
-Support for multiple gateways (use factory)
-Support circuit-breaker during charge call
+- Payment gateways organized under `PaymentGatewayFactory`
+- Modular design for easy addition of new providers
 
-Outside of scope:
-User creation -> Will create a new user when performing get (if not exists)
-Credit card/founds validation
-Denied payment flow
+## Stripe Simulator Tests
 
-Top-up flow:
-Wallet must exist, if not throws error (404 for wallet not found)
-sync:
-create transaction
-call async flow and return with accepted 201
+| Test Case              | Response          | Handling Required             | Validation Level | Notes                  |
+|------------------------|-------------------|-------------------------------|------------------|------------------------|
+| **Basic Tests**        |                   |                               |                  |                        |
+| Malformed JSON         | 400 Bad Request   | Throw StripeServiceException  | N/A              | Correct                |
+| Valid Request          | 200 OK            | Accept                        | N/A              | No idempotency control |
+| **Amount Checks**      |                   |                               |                  |                        |
+| Amount <10 EUR         | 422 Unprocessable | Throw AmountTooSmallException | Client           | Pre-filter             |
+| Negative Amount        | 422 Unprocessable | Throw InvalidAmountException  | Client           | Must validate          |
+| Very Large Amount      | Accepted          | Set max (e.g., 10,000 EUR)    | Client           | Fraud prevention       |
+| Decimal Precision      | No limits         | Limit to 2 decimals           | Client           | Currency standard      |
+| **Card Validation**    |                   |                               |                  |                        |
+| Empty Card             | 200 OK            | Throw InvalidCardException    | Client           | Pre-validate           |
+| Invalid Card Format    | 200 OK            | Throw InvalidCardException    | Client           | Pre-validate           |
+| Invalid Luhn Card      | Accepted          | Add Luhn check                | Client           | Basic validation       |
+| Expired Card           | Ignored           | (Optional) Add validation     | Client           | Not required           |
+| **Request Validation** |                   |                               |                  |                        |
+| Null Values            | Accepted          | Validate required fields      | Client           | Required fields        |
+| Missing Fields         | 400 Bad Request   | N/A                           | Simulator        | Correct                |
+| **Advanced Cases**     |                   |                               |                  |                        |
+| Duplicate Idempotency  | Ignored           | (Optional) Implement          | Client           | Not required           |
 
-async flow
-Submit payment request with CompletableFuture
-fill the transaction details from payment response
-If transaction success, update wallet
+## Development Notes
 
-Get wallet flow:
-If wallet does not exist for given user, create a new one
-return wallet containing last 10 transactions
+### Transaction Status Flow
 
-Cron jobs:
-Resubmit transactions that were not submitted (created)
-Check for transaction that were submitted but doesn't have response
-Update wallets for transactions that were not finalized (successful)
-Cleanup older transaction (ttl 30 days)
+Proposed states:  
+`CREATED → SUBMITTED → SUCCESSFUL/FINALIZED/DENIED`  
+(Implement state machine for transitions)
+
+### Future Features
+
+- Multiple payment methods
+- Payment gateway factory
+- Circuit breaker for charge calls
+
+### Out of Scope
+
+- User creation (auto-handled)
+- Credit card/funds validation
+    - Luhn algorithm
+- Denied payment handling
+- Scheduled jobs for:
+    - Resubmitting unsubmitted transactions
+    - Checking pending responses
+    - Finalizing successful transactions
+    - Cleaning old transactions (>30 days)
+- Retry mechanism in case external API fails -> can be easily added later
+
+## Workflows
+
+### Get Wallet Flow
+
+1. Find wallet by user ID
+2. Create new wallet if not found
+3. Return wallet with last 10 transactions
+
+### Top-Up Flow
+
+1. Verify wallet exists (404 if not)
+2. Create transaction record
+3. Start async payment process
+4. Return 201 Accepted
+
+Async Steps:
+
+1. Submit payment request
+2. Update transaction from payment response
+3. Update wallet if successful
 

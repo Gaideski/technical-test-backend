@@ -1,9 +1,13 @@
 package com.playtomic.tests.wallet.service.impl;
 
 import com.playtomic.tests.wallet.model.dto.Wallet;
+import com.playtomic.tests.wallet.repository.TransactionRepository;
+import com.playtomic.tests.wallet.repository.WalletRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
@@ -35,6 +39,21 @@ public class WalletServiceEndToEndTest {
     private final Random random = new Random();
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private WalletRepository walletRepository;
+
+    @Autowired
+    private TransactionRepository transactionRepository;
+
+    @BeforeEach
+    public void cleanDatabase() {
+        logger.info("Cleaning database before test...");
+        transactionRepository.deleteAll();
+        walletRepository.deleteAll();
+        logger.info("Database cleanup complete");
+    }
+
 
     @Test
     public void testConcurrentRecharges() throws Exception {

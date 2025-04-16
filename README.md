@@ -41,3 +41,152 @@ You can spend as much time as you need but we think that 4 hours is enough to
 show [the requirements of this job.](OFFER.md)
 You don't have to document your code, but you can write down anything you want to explain or anything you have skipped.
 You don't need to write tests for everything, but we would like to see different types of tests.
+
+Here's a simple Markdown API specification document that anyone can use to test the WalletController API:
+
+# Wallet API Specification
+
+```markdown
+
+## Base URL
+`http://localhost:8090/api/wallet`
+
+## Endpoints
+
+### 1. Get or Create Wallet
+
+**Endpoint:** `GET /`
+
+**Headers:**
+- `account_id`: (string, required) - User account ID (5-50 characters)
+- `session_id`: (string, required) - Session ID (10-100 characters)
+
+**Success Response:**
+```json
+{
+  "walletId": 1,
+  "accountId": "user123",
+  "amount": 100.00,
+  "recentTransactions": [
+    {
+      "transactionId": 1,
+      "amount": 50.00,
+      "status": "COMPLETED",
+      "paymentMethod": "CARD",
+      "paymentGateway": "STRIPE",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "finishedAt": "2023-01-01T00:00:05Z"
+    }
+  ]
+}
+```
+
+### 2. Recharge Wallet
+
+**Endpoint:** `POST /recharge`
+
+**Headers:**
+
+- `Content-Type`: `application/json`
+
+**Request Body:**
+
+```json
+{
+  "account_id": "user123",
+  "credit_card": "4111111111111111",
+  "amount": 50.00,
+  "session_id": "session1234567890"
+}
+```
+
+**Field Validations:**
+
+- `account_id`: Required, 5-50 characters
+- `credit_card`: Required, 13-19 digits
+- `amount`: Required, min 0.01, max 1,000,000.00
+- `session_id`: Required, 10-100 characters
+
+**Success Response:**
+
+```json
+{
+  "transactionId": 2,
+  "amount": 50.00,
+  "status": "PENDING",
+  "paymentMethod": "CARD",
+  "paymentGateway": "STRIPE",
+  "createdAt": "2023-01-01T00:00:00Z",
+  "finishedAt": null
+}
+```
+
+**Error Responses:**
+
+- `404 Not Found`: If wallet doesn't exist
+
+```json
+{
+  "message": "Wallet not found"
+}
+```
+
+- `422 Unprocessable Entity`: If idempotency violation occurs
+
+```json
+{
+  "message": "Transaction already exists with same idempotency key",
+  "existing_transaction": {
+    "transactionId": 2,
+    "amount": 50.00,
+    "status": "PENDING",
+    "paymentMethod": "CARD",
+    "paymentGateway": "STRIPE",
+    "createdAt": "2023-01-01T00:00:00Z",
+    "finishedAt": null
+  },
+  "request": {
+    "accountId": "user123",
+    "cardNumber": "4111111111111111",
+    "amount": 50.00,
+    "sessionId": "session1234567890",
+    "idempotencyKey": "abc123"
+  }
+}
+```
+
+## Sample Requests
+
+### cURL Examples
+
+**Get Wallet:**
+
+```bash
+curl -X GET "http://localhost:8090/api/wallet/" \
+  -H "account_id: user123" \
+  -H "session_id: session1234567890"
+```
+
+**Recharge Wallet:**
+
+```bash
+curl -X POST "http://localhost:8090/api/wallet/recharge" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account_id": "user123",
+    "credit_card": "4111111111111111",
+    "amount": 50.00,
+    "session_id": "session1234567890"
+  }'
+```
+
+## Testing Notes
+
+1. The API requires both `account_id` and `session_id` headers for all requests
+2. For recharge requests, the credit card number should be a valid test number (e.g., 4111111111111111 for Visa test
+   card)
+3. The same request with identical parameters will return a 422 error due to idempotency protection
+4. You can specify a custom idempotency key in the headers
+5. Amounts should be between 0.01 and 1,000,000.00
+
+```
