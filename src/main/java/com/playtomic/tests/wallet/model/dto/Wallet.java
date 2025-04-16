@@ -29,7 +29,7 @@ public class Wallet {
 
     @NonNull
     @Column(nullable = false)
-    private BigDecimal funds = BigDecimal.ZERO;
+    private BigDecimal amount = BigDecimal.ZERO;
 
     @Version
     private Long version;

@@ -19,19 +19,35 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 @RequiredArgsConstructor
 public class WalletService {
+    // Although we can lock the row for update on database side, this lock works only for different connections
+    // Since the application may re-use the connection to perform the requests, a software locking is required to
+    // prevent the same connection to perform concurrent requests.
+    private static final int AMOUNT_LOCK_BUCKETS = 256;
+    private static final Lock[] ACCOUNT_LOCK_BUCKET = new ReentrantLock[AMOUNT_LOCK_BUCKETS];
+
+    static {
+        for (int i = 0; i < AMOUNT_LOCK_BUCKETS; i++) {
+            ACCOUNT_LOCK_BUCKET[i] = new ReentrantLock();
+        }
+    }
+
     private final WalletRepository walletRepository;
     private final PaymentProcessorService paymentProcessorService;
     private final TransactionService transactionService;
     private final Logger logger = LoggerFactory.getLogger(WalletService.class);
-
 
     public WalletDto getOrCreateWalletByAccountId(String accountId, String sessionId) throws WalletNotFoundException {
         Optional<Wallet> wallet = walletRepository.findByAccountIdWithTransactions(accountId);
@@ -42,7 +58,7 @@ public class WalletService {
     public WalletDto createNewWallet(String accountId, String sessionId) throws WalletNotFoundException {
         try {
             Wallet newWallet = new Wallet();
-            newWallet.setFunds(BigDecimal.ZERO);
+            newWallet.setAmount(BigDecimal.ZERO);
             newWallet.setAccountId(accountId);
             walletRepository.save(newWallet);
             return formatWalletForResponse(walletRepository.save(newWallet));
@@ -64,7 +80,7 @@ public class WalletService {
         return new TransactionDto(transaction);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException, TransactionIdempotencyViolation {
         var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
                 .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
@@ -76,53 +92,76 @@ public class WalletService {
     // Listening to all events here, Ideally different events will go to different listeners.
     // In memory version of queue/async processing.
     @EventListener
-    public void handleTransactionStatusChange(TransactionStatusChangedEvent event) throws WalletNotFoundException, TransactionNotFoundException {
+    public void handleTransactionStatusChange(TransactionStatusChangedEvent event) throws WalletNotFoundException, TransactionNotFoundException, InterruptedException {
         if (event.getNewStatus() == PaymentStatus.SUCCESSFUL) {
             verifyTransactionAndUpdateFunds(event.getWalletId(), event.getTransactionId());
         }
     }
 
-    @Transactional
-    private void verifyTransactionAndUpdateFunds(Long walletId, Long transactionId) throws TransactionNotFoundException, WalletNotFoundException {
+    @Transactional(isolation = Isolation.READ_COMMITTED, propagation = Propagation.REQUIRES_NEW)
+    public void verifyTransactionAndUpdateFunds(Long walletId, Long transactionId)
+            throws TransactionNotFoundException, WalletNotFoundException, InterruptedException {
+
         final int MAX_RETRIES = 3;
         int retryCount = 0;
 
-        while (retryCount < MAX_RETRIES) {
-            try {
-                // Get the latest transaction state
-                var transaction = transactionService.findTransactionById(transactionId);
+        var lock = getLockFromAccountBucket(walletId);
+        if (!lock.tryLock(3, TimeUnit.SECONDS)) {
+            throw new RuntimeException("Account lock unavailable");
+        }
 
-                if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL) &&
-                        transaction.getPaymentGatewayTransactionId() != null &&
-                        !transaction.getPaymentGatewayTransactionId().isEmpty()) {
-                    // Get the latest wallet state
+        try {
+            while (retryCount < MAX_RETRIES) {
+                try {
+                    var transaction = transactionService.findTransactionByIdAndLock(transactionId)
+                            .orElseThrow(() -> new TransactionNotFoundException(transactionId));
+
+                    if (transaction.getPaymentStatus() == PaymentStatus.FINALIZED) {
+                        return; // Already processed
+                    }
+
                     Wallet currentWallet = walletRepository.findById(walletId)
                             .orElseThrow(() -> new WalletNotFoundException("Wallet not found"));
 
-                    currentWallet.setFunds(currentWallet.getFunds().add(transaction.getAmount()));
+                    int updatedRows = walletRepository.addFundsWithVersionCheck(
+                            walletId,
+                            transaction.getAmount(),
+                            currentWallet.getVersion()
+                    );
 
-                    walletRepository.save(currentWallet);
+                    if (updatedRows == 0) {
+                        // Version conflict occurred
+                        logger.warn("Conflict happened while updating wallet");
+                        throw new OptimisticLockException("Wallet version conflict");
+                    }
 
+                    // 4. Update transaction status
                     transactionService.finalizeTransaction(transaction);
+
+                    logger.info("Atomic update succeeded - walletId {}, added: {}. TransactionId: {}",
+                            walletId, transaction.getAmount(), transactionId);
 
                     return;
 
-                } else {
-                    // Transaction status doesn't require action here
-                }
-            } catch (OptimisticLockException | InvalidTransactionStatusException e) {
-                // Optimistic lock exception - another process modified the wallet
-                retryCount++;
-                if (retryCount >= MAX_RETRIES) {
-                    throw new IllegalStateException("Failed to update wallet funds after " + MAX_RETRIES + " attempts", e);
-                }
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("Retry interrupted", ie);
+                } catch (OptimisticLockException | InvalidTransactionStatusException e) {
+                    retryCount++;
+                    logger.warn("Optimistic lock conflict (attempt {}/{}), walletId: {}",
+                            retryCount, MAX_RETRIES, walletId);
+
+                    if (retryCount >= MAX_RETRIES) {
+                        throw new IllegalStateException("Failed after " + MAX_RETRIES + " attempts", e);
+                    }
+
+                    Thread.sleep(100 * (long) Math.pow(2, retryCount));
                 }
             }
+        } finally {
+            lock.unlock();
         }
+    }
+
+    // Get lock using hashcode. Getting rid of any negative values
+    private Lock getLockFromAccountBucket(Long lockId) {
+        return ACCOUNT_LOCK_BUCKET[(lockId.hashCode() & 0x7FFFFFFF) % AMOUNT_LOCK_BUCKETS];
     }
 }

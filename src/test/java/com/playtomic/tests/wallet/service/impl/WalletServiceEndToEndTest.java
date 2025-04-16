@@ -60,7 +60,7 @@ public class WalletServiceEndToEndTest {
             String sessionId = sessionIds.get(i);
             initialWallets.put(accountId, getOrCreateWallet(accountId, sessionId));
             logger.info("Initial balance for {}: {}", accountId,
-                    initialWallets.get(accountId) != null ? initialWallets.get(accountId).getFunds() : "null");
+                    initialWallets.get(accountId) != null ? initialWallets.get(accountId).getAmount() : "null");
         }
 
         logger.info("Created/Retrieved {} wallets", initialWallets.size());
@@ -90,7 +90,7 @@ public class WalletServiceEndToEndTest {
                 try {
                     // Get initial balance
                     Wallet walletBefore = getOrCreateWallet(accountId, sessionId);
-                    BigDecimal initialBalance = walletBefore != null ? walletBefore.getFunds() : BigDecimal.ZERO;
+                    BigDecimal initialBalance = walletBefore != null ? walletBefore.getAmount() : BigDecimal.ZERO;
 
                     // Create the request body as a Map with the correct JSON field names
                     Map<String, Object> requestBody = new HashMap<>();
@@ -144,7 +144,7 @@ public class WalletServiceEndToEndTest {
                 try {
                     // Get initial balance
                     Wallet walletBefore = getOrCreateWallet(accountId, sessionId);
-                    BigDecimal initialBalance = walletBefore != null ? walletBefore.getFunds() : BigDecimal.ZERO;
+                    BigDecimal initialBalance = walletBefore != null ? walletBefore.getAmount() : BigDecimal.ZERO;
 
                     // Create the request body as a Map with the correct JSON field names
                     Map<String, Object> requestBody = new HashMap<>();
@@ -231,7 +231,7 @@ public class WalletServiceEndToEndTest {
                 // First request - should succeed
                 try {
                     Wallet walletBefore = getOrCreateWallet(accountId, sessionId);
-                    BigDecimal initialBalance = walletBefore != null ? walletBefore.getFunds() : BigDecimal.ZERO;
+                    BigDecimal initialBalance = walletBefore != null ? walletBefore.getAmount() : BigDecimal.ZERO;
 
                     ResponseEntity<?> response = performRechargeWithMap(duplicateRequestBody);
                     assertEquals(202, response.getStatusCode().value(), "First request should be accepted");
@@ -256,9 +256,9 @@ public class WalletServiceEndToEndTest {
                         ResponseEntity<?> duplicateResponse = performRechargeWithMap(duplicateRequestBody);
 
                         // If we get here, it was accepted with 202
-                        assertEquals(202, duplicateResponse.getStatusCode().value(), "Duplicate request should be accepted");
-                        // Don't track this in expected amounts - it's a duplicate so shouldn't affect balance
-                        results.add(new RechargeResult(accountId, amount, true, "Duplicate accepted", true));
+                        assertEquals(202, duplicateResponse.getStatusCode().value(), "Duplicate request should not be accepted");
+                        // Don't track this in expected amounts - it's a duplicate and shouldn't#t be processed
+                        results.add(new RechargeResult(accountId, amount, true, "Duplicate should not be accepted!", false));
                     } catch (HttpClientErrorException.UnprocessableEntity ex) {
                         // This is the expected 422 case for explicitly rejecting duplicates
                         logger.info("Duplicate properly rejected with 422 for account {}", accountId);
@@ -291,6 +291,8 @@ public class WalletServiceEndToEndTest {
             }
         }
         executorService.shutdown();
+        logger.info("All test operations completed, waiting for final processing...");
+        Thread.sleep(2000);
 
         // 9. Analyze results
         int successfulRequests = 0;
@@ -324,8 +326,8 @@ public class WalletServiceEndToEndTest {
             Wallet initialWallet = initialWallets.get(accountId);
             Wallet finalWallet = getOrCreateWallet(accountId, sessionId);
 
-            BigDecimal initialBalance = initialWallet != null ? initialWallet.getFunds() : BigDecimal.ZERO;
-            BigDecimal finalBalance = finalWallet != null ? finalWallet.getFunds() : BigDecimal.ZERO;
+            BigDecimal initialBalance = initialWallet != null ? initialWallet.getAmount() : BigDecimal.ZERO;
+            BigDecimal finalBalance = finalWallet != null ? finalWallet.getAmount() : BigDecimal.ZERO;
             BigDecimal expectedRecharges = expectedValidRecharges.getOrDefault(accountId, BigDecimal.ZERO);
             BigDecimal expectedBalance = initialBalance.add(expectedRecharges);
 
@@ -338,7 +340,7 @@ public class WalletServiceEndToEndTest {
 
             // The final balance should equal the initial balance plus all valid recharges
             assertEquals(0, finalBalance.compareTo(expectedBalance),
-                    "Final balance should match expected balance for account " + accountId);
+                    "Final balance should match expected balance for walletId " + finalWallet.getWalletId());
 
             // Verify small amounts were not applied
             if (smallAmountRequests.containsKey(accountId)) {
@@ -420,7 +422,7 @@ public class WalletServiceEndToEndTest {
                 // Check current balance
                 Wallet currentWallet = getOrCreateWallet(accountId, sessionId);
                 if (currentWallet != null) {
-                    BigDecimal currentBalance = currentWallet.getFunds();
+                    BigDecimal currentBalance = currentWallet.getAmount();
 
                     // If balance is at least the expected minimum, consider it successful
                     if (currentBalance.compareTo(minimumExpectedBalance) >= 0) {

@@ -75,6 +75,9 @@ public class Transaction {
     @Column(nullable = false)
     private Date ttl;
 
+    @Version
+    private Long version;
+
     // Idea for refund. When refund is issued, we can fill both fields to correlate them
     // This will help to track the refund, as well avoid any foreign key issues when deleting older transactions
     @ManyToOne(fetch = FetchType.LAZY)

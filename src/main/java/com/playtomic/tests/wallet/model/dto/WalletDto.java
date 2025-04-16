@@ -11,12 +11,12 @@ import java.util.List;
 public class WalletDto {
     private Long walletId;
     private String accountId;
-    private BigDecimal funds;
+    private BigDecimal amount;
     private List<TransactionDto> recentTransactions;
 
     public WalletDto(Wallet wallet) {
         this.walletId = wallet.getWalletId();
-        this.funds = wallet.getFunds();
+        this.amount = wallet.getAmount();
         this.accountId = wallet.getAccountId();
         if (!wallet.getTransactions().isEmpty()) {
             setTransactions(wallet.getTransactions());

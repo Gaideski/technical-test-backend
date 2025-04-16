@@ -16,4 +16,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Transaction t JOIN FETCH t.wallet WHERE t.idempotencyKey = :idempotencyKey")
     Optional<Transaction> findByIdempotencyKeyWithLock(@Param("idempotencyKey") String idempotencyKey);
+
+
+    @Lock(LockModeType.OPTIMISTIC)
+    @Query("SELECT t FROM Transaction t WHERE t.id = :id")
+    Optional<Transaction> findByIdWithLock(@Param("id") Long id);
+
 }

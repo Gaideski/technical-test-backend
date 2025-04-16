@@ -129,4 +129,8 @@ public class TransactionService {
             throw new IllegalStateException("Failed to submit transaction", e);
         }
     }
+
+    public Optional<Transaction> findTransactionByIdAndLock(Long transactionId) {
+        return transactionRepository.findByIdWithLock(transactionId);
+    }
 }
