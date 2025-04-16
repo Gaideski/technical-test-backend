@@ -38,6 +38,9 @@ We'll discuss these potential features during the interview:
 - `finishedAt` (Date) - Completion timestamp
 - `paymentStatus` (Enum) - Current state
 - `ttl` (Date) - Auto-delete after 30 days (default)
+- `version` used for optimistic locking
+
+Dto's for fields exposure
 
 Features:
 
@@ -80,11 +83,13 @@ Proposed states:
 `CREATED → SUBMITTED → SUCCESSFUL/FINALIZED/DENIED`  
 (Implement state machine for transitions)
 
-### Future Features
+### Nice to have Features
 
 - Multiple payment methods
 - Payment gateway factory
 - Circuit breaker for charge calls
+- Idempotency
+- Concurrency control ** Use optimistic locking
 
 ### Out of Scope
 
@@ -94,10 +99,15 @@ Proposed states:
 - Denied payment handling
 - Scheduled jobs for:
     - Resubmitting unsubmitted transactions
+    - Cancelling stale transactions
     - Checking pending responses
     - Finalizing successful transactions
     - Cleaning old transactions (>30 days)
-- Retry mechanism in case external API fails -> can be easily added later
+- Retry mechanism in case external API fails
+    - can easily be added later (avoided to not deal with failure scenarios other than CB)
+- Implement exponential backoff for 422 responses 
+- Cache wallet balances with short TTL (30s)
+- Currency support
 
 ## Workflows
 
@@ -112,7 +122,7 @@ Proposed states:
 1. Verify wallet exists (404 if not)
 2. Create transaction record
 3. Start async payment process
-4. Return 201 Accepted
+4. Return 201 Accepted with transaction
 
 Async Steps:
 

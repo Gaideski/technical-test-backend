@@ -20,10 +20,13 @@ public class WalletDto {
         this.accountId = wallet.getAccountId();
         if (!wallet.getTransactions().isEmpty()) {
             setTransactions(wallet.getTransactions());
+        } else {
+            this.recentTransactions = List.of();
         }
     }
 
     public void setTransactions(List<Transaction> transactions) {
+
         this.recentTransactions = transactions.stream()
                 .sorted((t1, t2) -> t2.getCreatedAt().compareTo(t1.getCreatedAt()))
                 .limit(10)

@@ -57,8 +57,6 @@ public class WalletController {
         Map<String, Object> body = new HashMap<>();
         body.put("message", ex.getMessage());
         body.put("existing_transaction", ex.getExistingTransaction());
-        body.put("request", ex.getPaymentAttempt());
-
         return new ResponseEntity<>(body, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 }

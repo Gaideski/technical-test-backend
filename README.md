@@ -49,6 +49,7 @@ Here's a simple Markdown API specification document that anyone can use to test 
 ```markdown
 
 ## Base URL
+
 `http://localhost:8090/api/wallet`
 
 ## Endpoints
@@ -58,10 +59,12 @@ Here's a simple Markdown API specification document that anyone can use to test 
 **Endpoint:** `GET /`
 
 **Headers:**
+
 - `account_id`: (string, required) - User account ID (5-50 characters)
 - `session_id`: (string, required) - Session ID (10-100 characters)
 
 **Success Response:**
+
 ```json
 {
   "walletId": 1,
@@ -113,9 +116,9 @@ Here's a simple Markdown API specification document that anyone can use to test 
 {
   "transactionId": 2,
   "amount": 50.00,
-  "status": "PENDING",
+  "status": "CREATED",
   "paymentMethod": "CARD",
-  "paymentGateway": "STRIPE",
+  "paymentGateway": "null",
   "createdAt": "2023-01-01T00:00:00Z",
   "finishedAt": null
 }
@@ -144,13 +147,6 @@ Here's a simple Markdown API specification document that anyone can use to test 
     "paymentGateway": "STRIPE",
     "createdAt": "2023-01-01T00:00:00Z",
     "finishedAt": null
-  },
-  "request": {
-    "accountId": "user123",
-    "cardNumber": "4111111111111111",
-    "amount": 50.00,
-    "sessionId": "session1234567890",
-    "idempotencyKey": "abc123"
   }
 }
 ```
@@ -163,9 +159,18 @@ Here's a simple Markdown API specification document that anyone can use to test 
 
 ```bash
 curl -X GET "http://localhost:8090/api/wallet/" \
-  -H "account_id: user123" \
-  -H "session_id: session1234567890"
+  -H "account_id: abc123" \
+  -H "session_id: 1231211044al11"
 ```
+
+Response
+``
+{
+    "walletId": 1,
+    "accountId": "abc123",
+    "amount": 0,
+    "recentTransactions": []
+}``
 
 **Recharge Wallet:**
 
@@ -173,12 +178,50 @@ curl -X GET "http://localhost:8090/api/wallet/" \
 curl -X POST "http://localhost:8090/api/wallet/recharge" \
   -H "Content-Type: application/json" \
   -d '{
-    "account_id": "user123",
-    "credit_card": "4111111111111111",
-    "amount": 50.00,
-    "session_id": "session1234567890"
-  }'
+    "account_id":"abc123",
+    "credit_card":4242424242424242,
+    "amount":21,
+    "session_id":"1231211044al11"
+}'
 ```
+
+Response
+``
+{
+    "transactionId": 1,
+    "amount": 21,
+    "status": "CREATED",
+    "paymentMethod": "CARD",
+    "paymentGateway": null,
+    "createdAt": "2025-04-16T14:47:49.492+00:00",
+    "finishedAt": null
+}
+``
+
+```bash
+curl -X GET "http://localhost:8090/api/wallet/" \
+  -H "account_id: abc123" \
+  -H "session_id: 1231211044al11"
+```
+
+Response
+``
+{
+    "walletId": 1,
+    "accountId": "abc123",
+    "amount": 21.00,
+    "recentTransactions": [
+        {
+            "transactionId": 1,
+            "amount": 21.00,
+            "status": "FINALIZED",
+            "paymentMethod": "CARD",
+            "paymentGateway": "STRIPE",
+            "createdAt": "2025-04-16T14:47:49.492+00:00",
+            "finishedAt": "2025-04-16T14:47:49.926+00:00"
+        }
+    ]
+}``
 
 ## Testing Notes
 
