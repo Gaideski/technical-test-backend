@@ -23,9 +23,6 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("SELECT w FROM Wallet w WHERE w.walletId = :walletId")
     Optional<Wallet> findById(@Param("walletId") Long walletId);
 
-    @Lock(LockModeType.OPTIMISTIC)
-    @Query("SELECT w FROM Wallet w WHERE w.id = :id")
-    Optional<Wallet> findByIdWithLock(@Param("id") Long id);
 
     @Modifying
     @Query(value = "UPDATE wallets SET amount = amount + :amount, version = version + 1 " +
@@ -36,7 +33,5 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
             @Param("version") Long version
     );
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT w FROM Wallet w WHERE w.id = :id")
-    Optional<Wallet> findByIdForUpdate(@Param("id") Long id);
+
 }

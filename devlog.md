@@ -105,7 +105,7 @@ Proposed states:
     - Cleaning old transactions (>30 days)
 - Retry mechanism in case external API fails
     - can easily be added later (avoided to not deal with failure scenarios other than CB)
-- Implement exponential backoff for 422 responses 
+- Implement exponential backoff for 422 responses
 - Cache wallet balances with short TTL (30s)
 - Currency support
 

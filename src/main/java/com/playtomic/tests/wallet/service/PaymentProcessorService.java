@@ -58,6 +58,7 @@ public class PaymentProcessorService {
             try {
                 processGatewayResponse(transactionId, paymentRequest, response, conn.getPaymentGateway());
 
+                // Emulating multi-step process. Not required
                 transactionService.updateTransactionPaymentStatus(transactionId,
                         PaymentStatus.PROCESSING);
 

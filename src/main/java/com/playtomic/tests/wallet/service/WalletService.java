@@ -55,7 +55,7 @@ public class WalletService {
     }
 
     @Transactional
-    public WalletDto createNewWallet(String accountId, String sessionId) throws WalletNotFoundException {
+    public WalletDto createNewWallet(String accountId, String sessionId) {
         try {
             Wallet newWallet = new Wallet();
             newWallet.setAmount(BigDecimal.ZERO);
@@ -81,7 +81,7 @@ public class WalletService {
     }
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException, InvalidTransactionStatusException, TransactionIdempotencyViolation {
+    private Transaction initiateTransaction(PaymentRequest paymentRequest) throws WalletNotFoundException, TransactionIdempotencyViolation {
         var wallet = walletRepository.findByAccountId(paymentRequest.getAccountId())
                 .orElseThrow(() -> new WalletNotFoundException(paymentRequest.getAccountId()));
 
