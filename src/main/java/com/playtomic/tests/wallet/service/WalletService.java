@@ -93,8 +93,8 @@ public class WalletService {
                 var transaction = transactionService.findTransactionById(transactionId);
 
                 if (transaction.getPaymentStatus().equals(PaymentStatus.SUCCESSFUL) &&
-                         transaction.getPaymentGatewayTransactionId()!=null &&
-                         !transaction.getPaymentGatewayTransactionId().isEmpty()) {
+                        transaction.getPaymentGatewayTransactionId() != null &&
+                        !transaction.getPaymentGatewayTransactionId().isEmpty()) {
                     // Get the latest wallet state
                     Wallet currentWallet = walletRepository.findById(walletId)
                             .orElseThrow(() -> new WalletNotFoundException("Wallet not found"));

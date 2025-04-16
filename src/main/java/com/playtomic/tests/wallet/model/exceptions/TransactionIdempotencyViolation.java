@@ -9,10 +9,11 @@ import lombok.Getter;
 public class TransactionIdempotencyViolation extends Exception {
     TransactionDto existingTransaction;
     IPaymentRequest paymentAttempt;
+
     public TransactionIdempotencyViolation(String msg, Transaction existingTransaction, IPaymentRequest paymentAttempt) {
         super(msg);
-        this.existingTransaction=new TransactionDto(existingTransaction);
-        this.paymentAttempt=paymentAttempt;
+        this.existingTransaction = new TransactionDto(existingTransaction);
+        this.paymentAttempt = paymentAttempt;
     }
 
 }

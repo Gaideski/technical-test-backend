@@ -7,7 +7,6 @@ import com.playtomic.tests.wallet.model.constants.PaymentType;
 import com.playtomic.tests.wallet.utils.IdempotencyUtils;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 
 import java.math.BigDecimal;
@@ -50,7 +49,7 @@ public class PaymentRequest implements IPaymentRequest {
         this.cardNumber = card;
         this.amount = amount;
         this.sessionId = sessionId;
-        this.idempotencyKey= IdempotencyUtils.generateIdempotenceKey(this);
+        this.idempotencyKey = IdempotencyUtils.generateIdempotenceKey(this);
     }
 
 }

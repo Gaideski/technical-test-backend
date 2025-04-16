@@ -8,7 +8,10 @@ public interface IPaymentRequest {
     String getCardNumber();
 
     BigDecimal getAmount();
+
     String getIdempotencyKey();
+
     String getAccountId();
+
     PaymentMethod getPaymentMethod();
 }

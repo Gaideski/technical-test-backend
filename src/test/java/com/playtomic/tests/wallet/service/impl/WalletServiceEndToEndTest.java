@@ -1,7 +1,6 @@
 package com.playtomic.tests.wallet.service.impl;
 
 import com.playtomic.tests.wallet.model.dto.Wallet;
-import lombok.Getter;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,23 +23,18 @@ import static org.junit.jupiter.api.Assertions.*;
 public class WalletServiceEndToEndTest {
 
     private static final Logger logger = LoggerFactory.getLogger(WalletServiceEndToEndTest.class);
-
-    @LocalServerPort
-    private int port;
-
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final Random random = new Random();
-
     private static final String BASE_URL = "http://localhost:";
     private static final String WALLET_API = "/api/wallet/";
     private static final String RECHARGE_API = "/api/wallet/recharge";
-
     private static final int NUM_USERS = 10;
     private static final int NUM_INVALID_USERS = 5;
-
     // Timeout and polling configuration
     private static final int MAX_POLL_ATTEMPTS = 15;
     private static final int POLL_INTERVAL_MS = 500;
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final Random random = new Random();
+    @LocalServerPort
+    private int port;
 
     @Test
     public void testConcurrentRecharges() throws Exception {
@@ -71,8 +65,14 @@ public class WalletServiceEndToEndTest {
 
         logger.info("Created/Retrieved {} wallets", initialWallets.size());
 
+        // Track expected changes for each account
+        ConcurrentMap<String, BigDecimal> expectedValidRecharges = new ConcurrentHashMap<>();
+
+        // List to track small amount recharges for validation
+        ConcurrentMap<String, List<BigDecimal>> smallAmountRequests = new ConcurrentHashMap<>();
+
         // 5. Prepare a mix of valid and invalid requests
-        List<Callable<RechargeResult>> requests = new ArrayList<>();
+        List<Callable<List<RechargeResult>>> requests = new ArrayList<>();
 
         // Valid recharges with amounts >= 10
         for (int i = 0; i < NUM_USERS * 3; i++) {
@@ -86,6 +86,7 @@ public class WalletServiceEndToEndTest {
 
             int finalI = i;
             requests.add(() -> {
+                List<RechargeResult> results = new ArrayList<>();
                 try {
                     // Get initial balance
                     Wallet walletBefore = getOrCreateWallet(accountId, sessionId);
@@ -102,35 +103,44 @@ public class WalletServiceEndToEndTest {
                     logger.info("Recharge request {} sent: {} - {}", finalI, accountId, amount);
                     assertEquals(202, response.getStatusCode().value());
 
+                    // Track the expected recharge amount
+                    expectedValidRecharges.compute(accountId, (k, v) -> (v == null) ? amount : v.add(amount));
+
                     // Wait and verify the balance was updated
                     boolean verified = waitForBalanceUpdate(accountId, sessionId, initialBalance, amount);
 
-                    return new RechargeResult(
+                    results.add(new RechargeResult(
                             accountId,
                             amount,
                             true,
                             verified ? "Balance verified" : "Balance not updated after timeout",
-                            verified);
+                            verified));
 
                 } catch (Exception e) {
                     logger.error("Error during valid recharge {}: {}", finalI, e.getMessage());
-                    return new RechargeResult(accountId, amount, false, e.getMessage(), false);
+                    results.add(new RechargeResult(accountId, amount, false, e.getMessage(), false));
                 }
+                return results;
             });
         }
 
         // Invalid recharges - amount too small (< 10)
         for (int i = 0; i < NUM_USERS * 2; i++) {
-            String accountId = validAccountIds.get(random.nextInt(validAccountIds.size()));
+            String accountId = validAccountIds.get(random.nextInt(NUM_USERS));
             String sessionId = initialWallets.get(accountId) != null ?
                     sessionIds.get(validAccountIds.indexOf(accountId)) :
-                    "session-" + UUID.randomUUID().toString();
+                    "session-" + UUID.randomUUID();
 
             BigDecimal amount = BigDecimal.valueOf(0.01 + random.nextDouble() * 9.98).setScale(2, BigDecimal.ROUND_HALF_UP);
             String cardNumber = "4111111111111111"; // Test card number
 
+            // Track small amount requests for this account
+            smallAmountRequests.computeIfAbsent(accountId, k -> Collections.synchronizedList(new ArrayList<>()))
+                    .add(amount);
+
             int finalI = i;
             requests.add(() -> {
+                List<RechargeResult> results = new ArrayList<>();
                 try {
                     // Get initial balance
                     Wallet walletBefore = getOrCreateWallet(accountId, sessionId);
@@ -146,27 +156,20 @@ public class WalletServiceEndToEndTest {
                     ResponseEntity<?> response = performRechargeWithMap(requestBody);
                     logger.info("Small amount recharge {} sent: {} - {}", finalI, accountId, amount);
 
-                    // For small amounts, we expect either rejection or no balance change
-                    // Check that the balance didn't change if request was accepted
-                    Wallet walletAfter = getOrCreateWallet(accountId, sessionId);
-                    BigDecimal afterBalance = walletAfter != null ? walletAfter.getFunds() : BigDecimal.ZERO;
-
-                    // If the API accepts the request but doesn't change balance, that's expected
-                    // If the API changes the balance, that's unexpected for small amounts
-                    boolean expectedBehavior = afterBalance.compareTo(initialBalance) == 0;
-
-                    return new RechargeResult(
+                    // For small amounts, we don't check immediately - we'll do a consolidated check at the end
+                    results.add(new RechargeResult(
                             accountId,
                             amount,
                             true,
-                            expectedBehavior ? "Small amount handled correctly" : "Small amount unexpectedly applied",
-                            expectedBehavior);
+                            "Small amount recharge accepted - will verify at end",
+                            true));
 
                 } catch (Exception e) {
                     // Small amount might be rejected at API level
                     logger.info("Expected error for small amount {} recharge: {} - {}", finalI, amount, e.getMessage());
-                    return new RechargeResult(accountId, amount, false, e.getMessage(), true);
+                    results.add(new RechargeResult(accountId, amount, false, e.getMessage(), true));
                 }
+                return results;
             });
         }
 
@@ -179,6 +182,7 @@ public class WalletServiceEndToEndTest {
 
             int finalI = i;
             requests.add(() -> {
+                List<RechargeResult> results = new ArrayList<>();
                 try {
                     // Create the request body as a Map with the correct JSON field names
                     Map<String, Object> requestBody = new HashMap<>();
@@ -189,25 +193,28 @@ public class WalletServiceEndToEndTest {
 
                     performRechargeWithMap(requestBody);
                     logger.info("Unexpected success for invalid account {} recharge", finalI);
-                    return new RechargeResult(accountId, amount, true, "Unexpected success for invalid account", false);
+                    results.add(new RechargeResult(accountId, amount, true, "Unexpected success for invalid account", false));
                 } catch (HttpClientErrorException e) {
                     // Expected behavior - not found
                     logger.info("Expected error for invalid account {} recharge: {} - {}", finalI, accountId, e.getMessage());
                     assertEquals(404, e.getStatusCode().value(), "Expected 404 for invalid account");
-                    return new RechargeResult(accountId, amount, false, e.getMessage(), true);
+                    results.add(new RechargeResult(accountId, amount, false, e.getMessage(), true));
                 } catch (Exception e) {
                     logger.error("Unexpected error type for invalid account {} recharge: {}", finalI, e.getMessage());
-                    return new RechargeResult(accountId, amount, false, e.getMessage(), false);
+                    results.add(new RechargeResult(accountId, amount, false, e.getMessage(), false));
                 }
+                return results;
             });
         }
 
-        // Duplicate requests (idempotency test)
+        // Duplicate requests (idempotency test) - FIXED to run sequentially in the same callable
         for (int i = 0; i < NUM_USERS; i++) {
             String accountId = validAccountIds.get(i);
             String sessionId = sessionIds.get(i);
             BigDecimal amount = BigDecimal.valueOf(50);
             String cardNumber = "4111111111111111";
+
+            String explicitIdempotencyKey = "test-idempotency-key-" + accountId + "-" + UUID.randomUUID();
 
             // Create unique request body for each user
             Map<String, Object> duplicateRequestBody = new HashMap<>();
@@ -215,49 +222,55 @@ public class WalletServiceEndToEndTest {
             duplicateRequestBody.put("credit_card", cardNumber);
             duplicateRequestBody.put("amount", amount.setScale(2, RoundingMode.HALF_UP)); // Explicit scale
             duplicateRequestBody.put("session_id", sessionId);
-            duplicateRequestBody.put("idempotency_key", "test-key-" + accountId); // Explicit key
+            duplicateRequestBody.put("idempotency_key", explicitIdempotencyKey); // Add explicit key
 
-            // First request - should succeed
+            // Bundle the two requests together in one callable to ensure they run in order
             requests.add(() -> {
-                try {
+                List<RechargeResult> results = new ArrayList<>();
 
+                // First request - should succeed
+                try {
                     Wallet walletBefore = getOrCreateWallet(accountId, sessionId);
                     BigDecimal initialBalance = walletBefore != null ? walletBefore.getFunds() : BigDecimal.ZERO;
 
                     ResponseEntity<?> response = performRechargeWithMap(duplicateRequestBody);
                     assertEquals(202, response.getStatusCode().value(), "First request should be accepted");
 
+                    // Track the expected recharge amount
+                    expectedValidRecharges.compute(accountId, (k, v) -> (v == null) ? amount : v.add(amount));
+
+                    // Wait for the balance to be updated before proceeding to the second request
                     boolean verified = waitForBalanceUpdate(accountId, sessionId, initialBalance, amount);
-                    return new RechargeResult(
+                    results.add(new RechargeResult(
                             accountId,
                             amount,
                             true,
                             verified ? "First request succeeded" : "Balance not updated",
                             verified
-                    );
-                } catch (Exception e) {
-                    return new RechargeResult(accountId, amount, false, e.getMessage(), false);
-                }
-            });
+                    ));
 
-            // Second request - should be idempotent
-            requests.add(() -> {
-                try {
-                    // Wait briefly to ensure first request is processed
-                    Thread.sleep(1000);
+                    // Now we can be sure the first request was processed before proceeding
 
-                    ResponseEntity<?> response = performRechargeWithMap(duplicateRequestBody);
+                    // Second request - should be idempotent
+                    try {
+                        ResponseEntity<?> duplicateResponse = performRechargeWithMap(duplicateRequestBody);
 
-                    // Accept either 202 (idempotent) or 422 (explicit duplicate)
-                    if (response.getStatusCode().value() == 422) {
-                        return new RechargeResult(accountId, amount, false, "Duplicate detected (expected)", true);
+                        // If we get here, it was accepted with 202
+                        assertEquals(202, duplicateResponse.getStatusCode().value(), "Duplicate request should be accepted");
+                        // Don't track this in expected amounts - it's a duplicate so shouldn't affect balance
+                        results.add(new RechargeResult(accountId, amount, true, "Duplicate accepted", true));
+                    } catch (HttpClientErrorException.UnprocessableEntity ex) {
+                        // This is the expected 422 case for explicitly rejecting duplicates
+                        logger.info("Duplicate properly rejected with 422 for account {}", accountId);
+                        results.add(new RechargeResult(accountId, amount, false, "Duplicate detected (expected)", true));
                     }
-                    assertEquals(202, response.getStatusCode().value(), "Duplicate request should be accepted");
 
-                    return new RechargeResult(accountId, amount, true, "Duplicate accepted", true);
                 } catch (Exception e) {
-                    return new RechargeResult(accountId, amount, false, e.getMessage(), false);
+                    results.add(new RechargeResult(accountId, amount, false, e.getMessage(), false));
+                    // If the first request fails, we don't attempt the second
                 }
+
+                return results;
             });
         }
 
@@ -266,13 +279,13 @@ public class WalletServiceEndToEndTest {
 
         // 7. Execute requests concurrently
         ExecutorService executorService = Executors.newFixedThreadPool(10);
-        List<Future<RechargeResult>> futures = executorService.invokeAll(requests);
+        List<Future<List<RechargeResult>>> futures = executorService.invokeAll(requests);
 
         // 8. Wait for all requests to complete and collect results
         List<RechargeResult> results = new ArrayList<>();
-        for (Future<RechargeResult> future : futures) {
+        for (Future<List<RechargeResult>> future : futures) {
             try {
-                results.add(future.get(30, TimeUnit.SECONDS));
+                results.addAll(future.get(30, TimeUnit.SECONDS));
             } catch (Exception e) {
                 logger.error("Error waiting for request result: {}", e.getMessage());
             }
@@ -313,12 +326,35 @@ public class WalletServiceEndToEndTest {
 
             BigDecimal initialBalance = initialWallet != null ? initialWallet.getFunds() : BigDecimal.ZERO;
             BigDecimal finalBalance = finalWallet != null ? finalWallet.getFunds() : BigDecimal.ZERO;
+            BigDecimal expectedRecharges = expectedValidRecharges.getOrDefault(accountId, BigDecimal.ZERO);
+            BigDecimal expectedBalance = initialBalance.add(expectedRecharges);
 
-            logger.info("Account {}: Initial balance = {}, Final balance = {}, Difference = {}",
-                    accountId, initialBalance, finalBalance, finalBalance.subtract(initialBalance));
+            logger.info("Account {}: Initial balance = {}, Final balance = {}, Expected balance = {}, Difference = {}",
+                    accountId, initialBalance, finalBalance, expectedBalance, finalBalance.subtract(expectedBalance));
 
+            // Verify balances after all operations
             assertTrue(finalBalance.compareTo(BigDecimal.ZERO) >= 0,
                     "Balance should be non-negative for account " + accountId);
+
+            // The final balance should equal the initial balance plus all valid recharges
+            assertEquals(0, finalBalance.compareTo(expectedBalance),
+                    "Final balance should match expected balance for account " + accountId);
+
+            // Verify small amounts were not applied
+            if (smallAmountRequests.containsKey(accountId)) {
+                // Small amount recharges should not have affected the balance
+                BigDecimal smallAmountTotal = smallAmountRequests.get(accountId).stream()
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                logger.info("Account {}: Total small amount recharges attempted: {}",
+                        accountId, smallAmountTotal);
+
+                // The final balance should not include small amounts
+                assertNotEquals(
+                        expectedBalance.add(smallAmountTotal).compareTo(finalBalance), 0,
+                        "Small amount recharges should not be applied for account " + accountId
+                );
+            }
         }
 
         // Assert that we don't have any unexpected failures
@@ -364,15 +400,17 @@ public class WalletServiceEndToEndTest {
     /**
      * Waits for a balance update to be reflected in the wallet.
      *
-     * @param accountId The account ID
-     * @param sessionId The session ID
+     * @param accountId      The account ID
+     * @param sessionId      The session ID
      * @param initialBalance The initial balance before recharge
      * @param expectedAmount The amount that should be added
      * @return true if balance was updated correctly, false if timed out
      */
     private boolean waitForBalanceUpdate(String accountId, String sessionId,
                                          BigDecimal initialBalance, BigDecimal expectedAmount) {
-        BigDecimal expectedBalance = initialBalance.add(expectedAmount);
+        // The expected balance is AT LEAST initialBalance + expectedAmount
+        // since other concurrent recharges may also have completed
+        BigDecimal minimumExpectedBalance = initialBalance.add(expectedAmount);
 
         for (int attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
             try {
@@ -384,15 +422,15 @@ public class WalletServiceEndToEndTest {
                 if (currentWallet != null) {
                     BigDecimal currentBalance = currentWallet.getFunds();
 
-                    // If balance matches expected, return true
-                    if (currentBalance.compareTo(expectedBalance) == 0) {
-                        logger.info("Balance updated correctly for account {} after {} attempts: {}",
-                                accountId, attempt + 1, currentBalance);
+                    // If balance is at least the expected minimum, consider it successful
+                    if (currentBalance.compareTo(minimumExpectedBalance) >= 0) {
+                        logger.info("Balance updated for account {} after {} attempts: {} (minimum expected: {})",
+                                accountId, attempt + 1, currentBalance, minimumExpectedBalance);
                         return true;
                     }
 
-                    logger.debug("Waiting for balance update for account {}: current={}, expected={}",
-                            accountId, currentBalance, expectedBalance);
+                    logger.debug("Waiting for balance update for account {}: current={}, minimum expected={}",
+                            accountId, currentBalance, minimumExpectedBalance);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -403,13 +441,12 @@ public class WalletServiceEndToEndTest {
             }
         }
 
-        logger.warn("Timed out waiting for balance update for account {}: expected={}",
-                accountId, expectedBalance);
+        logger.warn("Timed out waiting for balance update for account {}: minimum expected={}",
+                accountId, minimumExpectedBalance);
         return false;
     }
 
-        private record RechargeResult(String accountId, BigDecimal amount, boolean success, String message,
-                                      boolean expectedOutcome) {
-
+    private record RechargeResult(String accountId, BigDecimal amount, boolean success, String message,
+                                  boolean expectedOutcome) {
     }
 }
